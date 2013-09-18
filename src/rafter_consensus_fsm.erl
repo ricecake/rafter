@@ -13,8 +13,8 @@
 -define(timeout(), timeout(State#state.timer_start, State#state.timer_duration)).
 
 %% API
--export([start/0, stop/1, start/1, start_link/3, leader/1, op/2, set_config/2,
-         send/2, send_sync/2, get_state/1]).
+-export([start/0, stop/1, start/1, start_link/3, leader/1, read_op/2, op/2,
+         set_config/2, send/2, send_sync/2, get_state/1]).
 
 %% gen_fsm callbacks
 -export([init/1, code_change/4, handle_event/3, handle_info/3,
@@ -46,6 +46,9 @@ leader(Peer) ->
 
 op(Peer, Command) ->
     gen_fsm:sync_send_event(Peer, {op, Command}).
+
+read_op(Peer, Command) ->
+    gen_fsm:sync_send_event(Peer, {read_op, Command}).
 
 get_state(Peer) ->
     gen_fsm:sync_send_all_state_event(Peer, get_state, 100).

@@ -78,6 +78,7 @@
 -define(LATEST_VERSION, 1).
 
 %% Entry Types
+-define(NOOP, 0).
 -define(CONFIG, 1).
 -define(OP, 2).
 -define(ALL, [?CONFIG, ?OP]).
@@ -85,6 +86,8 @@
 %%====================================================================
 %% API
 %%====================================================================
+entry_to_binary(#rafter_entry{type=noop, term=Term, index=Index, cmd=noop}) ->
+    entry_to_binary(?NOOP, Term, Index, noop);
 entry_to_binary(#rafter_entry{type=config, term=Term, index=Index, cmd=Data}) ->
     entry_to_binary(?CONFIG, Term, Index, Data);
 entry_to_binary(#rafter_entry{type=op, term=Term, index=Index, cmd=Data}) ->
@@ -103,6 +106,8 @@ binary_to_entry(<<Sha1:20/binary, Type:8, Term:64, Index:64, Size:32, Data/binar
     Sha1 = crypto:hash(sha, <<Type:8, Term:64, Index:64, Size:32, Data/binary>>),
     binary_to_entry(Type, Term, Index, Data).
 
+binary_to_entry(?NOOP, Term, Index, _Data) ->
+    #rafter_entry{type=noop, term=Term, index=Index, cmd=noop};
 binary_to_entry(?CONFIG, Term, Index, Data) ->
     #rafter_entry{type=config, term=Term, index=Index, cmd=binary_to_term(Data)};
 binary_to_entry(?OP, Term, Index, Data) ->

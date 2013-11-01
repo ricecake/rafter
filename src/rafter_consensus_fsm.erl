@@ -84,7 +84,14 @@ init([Me, #rafter_opts{state_machine=StateMachine}]) ->
                    timer_duration = Duration,
                    state_machine=StateMachine},
     ok = StateMachine:init(),
-    NewState = State#state{config=rafter_log:get_config(Me)},
+    Config = rafter_log:get_config(Me),
+    NewState =
+        case Config#config.state of
+            blank ->
+                State#state{config=Config};
+            _ ->
+                State#state{config=Config, init_config=complete}
+        end,
     {ok, follower, NewState, Duration}.
 
 format_status(_, [_, State]) ->
@@ -412,7 +419,7 @@ leader(#append_entries_rpy{from=From, success=true}=Rpy,
             case State3#state.leader of
                 undefined ->
                     %% We just committed a config that doesn't include ourselves
-                    {next_state, follower, State2, ?timeout()};
+                    {next_state, follower, State3, ?timeout()};
                 _ ->
                     NewResponses = State3#state.responses,
                     case NewResponses =:= Responses of
@@ -624,6 +631,10 @@ commit_entries(NewCommitIndex, #state{commit_index=CommitIndex,
    lists:foldl(fun(Index, #state{client_reqs=CliReqs}=State1) ->
        NewState = State1#state{commit_index=Index},
        case rafter_log:get_entry(Me, Index) of
+
+           %% Noop - Ignore this beautiful request
+           {ok, #rafter_entry{type=noop}} ->
+               NewState;
 
            %% Normal Operation. Apply Command to StateMachine.
            {ok, #rafter_entry{type=op, cmd=Command}} ->
@@ -844,15 +855,25 @@ request_votes(#state{config=Config, term=Term, me=Me}) ->
                         last_log_term=rafter_log:get_last_term(Me)},
     [rafter_requester:send(Peer, Msg) || Peer <- Voters].
 
-become_leader(#state{me=Me}=State) ->
-    %% TODO: Commit a noop entry to the log so we can move the commit index
-    State#state{leader=Me,
-                responses=dict:new(),
-                followers=initialize_followers(State),
-                send_clock = 0,
-                send_clock_responses = dict:new(),
-                read_reqs = orddict:new(),
-                timer_start=os:timestamp()}.
+become_leader(#state{me=Me, term=Term, init_config=InitConfig}=State) ->
+    NewState = State#state{leader=Me,
+                           responses=dict:new(),
+                           followers=initialize_followers(State),
+                           send_clock = 0,
+                           send_clock_responses = dict:new(),
+                           read_reqs = orddict:new(),
+                           timer_start=os:timestamp()},
+
+    case InitConfig of
+        complete ->
+            %% Commit a noop entry to the log so we can move the commit index
+            Entry = #rafter_entry{type=noop, term=Term, cmd=noop},
+            append(Entry, NewState);
+        _ ->
+            %% First entry must always be a config entry
+            NewState
+    end.
+
 
 initialize_followers(#state{me=Me, config=Config}) ->
     Peers = rafter_config:followers(Me, Config),

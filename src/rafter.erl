@@ -5,7 +5,7 @@
 -include("rafter_opts.hrl").
 
 %% API
--export([start_node/2, stop_node/1, op/2, read_op/2, set_config/2, 
+-export([start_node/2, stop_node/1, op/2, read_op/2, set_config/2,
          get_state/1, get_leader/1, get_entry/2, get_last_entry/1]).
 
 %% Test API
@@ -17,14 +17,15 @@ start_node(Peer, Opts) ->
 stop_node(Peer) ->
     rafter_sup:stop_peer(Peer).
 
-%% @doc Run an operation on the backend state machine. 
+%% @doc Run an operation on the backend state machine.
 %% Note: Peer is just the local node in production.
 op(Peer, Command) ->
     Id = druuid:v4(),
     rafter_consensus_fsm:op(Peer, {Id, Command}).
 
 read_op(Peer, Command) ->
-    rafter_consensus_fsm:read_op(Peer, Command).
+    Id = druuid:v4(),
+    rafter_consensus_fsm:read_op(Peer, {Id, Command}).
 
 set_config(Peer, NewServers) ->
     Id = druuid:v4(),

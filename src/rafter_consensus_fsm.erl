@@ -372,7 +372,7 @@ leader(timeout, #state{term=Term, init_config=[Id, From], config=C}=S) ->
 leader(timeout, State) ->
     Duration = heartbeat_timeout(),
     NewState = State#state{timer_start=os:timestamp(), timer_duration=Duration},
-    NewState2 = send_append_entries(State),
+    NewState2 = send_append_entries(NewState),
     {next_state, leader, NewState2, Duration};
 
 %% We are out of date. Go back to follower state.
@@ -402,7 +402,7 @@ leader(#append_entries_rpy{term=Term, success=true},
     {next_state, leader, State, ?timeout()};
 
 %% Success!
-leader(#append_entries_rpy{from=From, success=true, index=Index}=Rpy,
+leader(#append_entries_rpy{from=From, success=true}=Rpy,
        #state{followers=Followers, responses=Responses, config=C, me=Me}=State) ->
     case lists:member(From, rafter_config:followers(Me, C)) of
         true ->
@@ -414,7 +414,8 @@ leader(#append_entries_rpy{from=From, success=true, index=Index}=Rpy,
                     %% We just committed a config that doesn't include ourselves
                     {next_state, follower, State2, ?timeout()};
                 _ ->
-                    case State3#state.responses =:= Responses of
+                    NewResponses = State3#state.responses,
+                    case NewResponses =:= Responses of
                         true ->
                             {next_state, leader, State3, ?timeout()};
                         false ->
@@ -547,9 +548,10 @@ append(Id, From, Entry,
     State#state{client_reqs=[ClientRequest | Reqs]}.
 
 setup_read_request(Id, From, Command, #state{send_clock=Clock,
+                                             me=Me,
                                              term=Term}=State) ->
     {ok, Timer} = timer:send_after(?CLIENT_TIMEOUT, Me,
-        {client_read_timeout, Clock, Id},
+        {client_read_timeout, Clock, Id}),
     ReadRequest = #client_req{id=Id,
                               from=From,
                               term=Term,
@@ -699,7 +701,7 @@ send_client_read_replies([], _StateMachine) ->
 send_client_read_replies(Requests, StateMachine) ->
     lists:map(fun({clock, ClientReqs}) ->
                 [send_client_reply(R, StateMachine:read(R#client_req.cmd))
-                    || R <- ClientReqs].
+                    || R <- ClientReqs]
               end, Requests).
 
 maybe_commit(#state{me=Me,
@@ -746,9 +748,9 @@ save_greater(Key, Val, Dict) ->
     CurrentVal = dict:find(Key, Dict),
     save_greater(Key, Val, Dict, CurrentVal).
 
-save_greater(Key, Val, Dict, {ok, CurrentVal}) when CurrentVal > Val ->
+save_greater(_Key, Val, Dict, {ok, CurrentVal}) when CurrentVal > Val ->
     Dict;
-save_greater(Key, CurrentVal, Dict, {ok, CurrentVal}) ->
+save_greater(_Key, CurrentVal, Dict, {ok, CurrentVal}) ->
     Dict;
 save_greater(Key, Val, Dict, {ok, _}) ->
     dict:store(Key, Val, Dict);

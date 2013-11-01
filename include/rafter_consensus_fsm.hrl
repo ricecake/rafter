@@ -33,9 +33,7 @@
     %% Reset to 0 on leader election.
     send_clock = 0 :: non_neg_integer(),
 
-    %% Keep track of the highest append_entries_ct received from each peer
-    %% The quorum_min of this should be higher than the value stored with a
-    %% client read request to ensure read linearizability
+    %% Keep track of the highest send_clock received from each peer
     %% Reset on leader election
     send_clock_responses = dict:new() :: dict(),
 
@@ -43,7 +41,7 @@
     client_reqs = [] :: [#client_req{}],
 
     %% Outstanding Client Read Requests
-    %% Keyed on send_clock, Val = #client_req{}.
+    %% Keyed on send_clock, Val = [#client_req{}]
     read_reqs = orddict:new() :: orddict:orddict(),
 
     %% All servers making up the ensemble

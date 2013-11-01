@@ -56,20 +56,19 @@ get_state(Peer) ->
 set_config(Peer, Config) ->
     gen_fsm:sync_send_event(Peer, {set_config, Config}).
 
-%% This funj
 -spec send(atom(), #vote{} | #append_entries_rpy{}) -> ok.
 send(To, Msg) ->
     %% Catch badarg error thrown if name is unregistered
     catch gen_fsm:send_event(To, Msg).
 
--spec send_sync(atom(), #request_vote{} | #append_entries{}) -> 
-    {ok, #vote{}} | {ok, #append_entries_rpy{}}. 
+-spec send_sync(atom(), #request_vote{} | #append_entries{}) ->
+    {ok, #vote{}} | {ok, #append_entries_rpy{}}.
 send_sync(To, Msg) ->
     Timeout=100,
     gen_fsm:sync_send_event(To, Msg, Timeout).
 
 %%=============================================================================
-%% gen_fsm callbacks 
+%% gen_fsm callbacks
 %%=============================================================================
 
 init([Me, #rafter_opts{state_machine=StateMachine}]) ->
@@ -78,7 +77,7 @@ init([Me, #rafter_opts{state_machine=StateMachine}]) ->
     #meta{voted_for=VotedFor, term=Term} = rafter_log:get_metadata(Me),
     State = #state{term=Term,
                    voted_for=VotedFor,
-                   me=Me, 
+                   me=Me,
                    responses=dict:new(),
                    followers=dict:new(),
                    timer_start=os:timestamp(),
@@ -104,12 +103,22 @@ handle_sync_event(get_leader, _From, StateName, State) ->
 handle_sync_event(_Event, _From, _StateName, State) ->
     {stop, badmsg, State}.
 
+handle_info({client_read_timeout, Clock, Id}, StateName,
+    #state{read_reqs=Reqs}=State) ->
+        ClientRequests = orddict:fetch(Clock, Reqs),
+        {ok, ClientReq} = find_client_req(Id, ClientRequests),
+        send_client_timeout_reply(ClientReq),
+        NewClientRequests = delete_client_req(Id, ClientRequests),
+        NewReqs = orddict:store(Clock, NewClientRequests, Reqs),
+        NewState = State#state{read_reqs=NewReqs},
+        {next_state, StateName, NewState, ?timeout()};
+
 handle_info({client_timeout, Id}, StateName, #state{client_reqs=Reqs}=State) ->
     case find_client_req(Id, Reqs) of
         {ok, ClientReq} ->
             send_client_timeout_reply(ClientReq),
             NewState = State#state{client_reqs=delete_client_req(Id, Reqs)},
-            {next_state, StateName, NewState, ?timeout()}; 
+            {next_state, StateName, NewState, ?timeout()};
         not_found ->
             {next_state, StateName, State, ?timeout()}
     end;
@@ -119,7 +128,7 @@ handle_info(_, _, State) ->
 terminate(_, _, _) ->
     ok.
 
-code_change(_OldVsn, StateName, State, _Extra) -> 
+code_change(_OldVsn, StateName, State, _Extra) ->
     {ok, StateName, State}.
 
 %%=============================================================================
@@ -149,24 +158,25 @@ follower(#append_entries_rpy{}, State) ->
 follower(#request_vote{}=RequestVote, _From, State) ->
     handle_request_vote(RequestVote, State);
 
-follower(#append_entries{term=Term}, _From, 
+follower(#append_entries{term=Term}, _From,
          #state{term=CurrentTerm, me=Me}=State) when CurrentTerm > Term ->
     Rpy = #append_entries_rpy{from=Me, term=CurrentTerm, success=false},
     {reply, Rpy, follower, State, ?timeout()};
-    
-follower(#append_entries{term=Term, from=From, prev_log_index=PrevLogIndex, 
-                         entries=Entries, commit_index=CommitIndex}=AppendEntries,
+
+follower(#append_entries{term=Term, from=From, prev_log_index=PrevLogIndex,
+                         entries=Entries, commit_index=CommitIndex,
+                         send_clock=Clock}=AppendEntries,
          _From, #state{me=Me}=State) ->
     Duration = election_timeout(),
     State2=set_term(Term, State),
     State3=State2#state{timer_start=os:timestamp(), timer_duration=Duration},
-    Rpy = #append_entries_rpy{term=Term, success=false, from=Me},
+    Rpy = #append_entries_rpy{send_clock=Clock, term=Term, success=false, from=Me},
     case consistency_check(AppendEntries, State3) of
         false ->
             {reply, Rpy, follower, State3, Duration};
         true ->
-            {ok, CurrentIndex} = rafter_log:check_and_append(Me, 
-                                                             Entries, 
+            {ok, CurrentIndex} = rafter_log:check_and_append(Me,
+                                                             Entries,
                                                              PrevLogIndex+1),
             Config = rafter_log:get_config(Me),
             NewRpy = Rpy#append_entries_rpy{success=true, index=CurrentIndex},
@@ -176,9 +186,9 @@ follower(#append_entries{term=Term, from=From, prev_log_index=PrevLogIndex,
     end;
 
 %% Allow setting config in follower state only if the config is blank
-%% (e.g. the log is empty). A config entry must always be the first 
+%% (e.g. the log is empty). A config entry must always be the first
 %% entry in every log.
-follower({set_config, {Id, NewServers}}, From, 
+follower({set_config, {Id, NewServers}}, From,
           #state{me=Me, followers=F, config=#config{state=blank}=C}=State) ->
     case lists:member(Me, NewServers) of
         true ->
@@ -187,8 +197,8 @@ follower({set_config, {Id, NewServers}}, From,
                                    init_config=[Id, From]},
             %% Transition to candidate state. Once we are elected leader we will
             %% send the config to the other machines. We have to do it this way
-            %% so that the entry we log  will have a valid term and can be 
-            %% committed without a noop.  Note that all other configs must 
+            %% so that the entry we log  will have a valid term and can be
+            %% committed without a noop.  Note that all other configs must
             %% be blank on the other machines.
             {next_state, candidate, NewState, 0};
         false ->
@@ -212,8 +222,8 @@ follower({read_op, _}, _From, #state{me=Me, config=Config,
 follower({read_op, _}, _From, #state{leader=Leader}=State) ->
     Reply = {error, {redirect, Leader}},
     {reply, Reply, follower, State, ?timeout()};
-    
-follower({op, _Command}, _From, #state{me=Me, config=Config, 
+
+follower({op, _Command}, _From, #state{me=Me, config=Config,
                                        leader=undefined}=State) ->
     Error = no_leader_error(Me, Config),
     {reply, {error, Error}, follower, State, ?timeout()};
@@ -244,7 +254,7 @@ candidate(timeout, #state{term=CurrentTerm, me=Me}=State) ->
     request_votes(NewState),
     {next_state, candidate, NewState, Duration};
 
-%% This should only happen if two machines are configured differently during 
+%% This should only happen if two machines are configured differently during
 %% initial configuration such that one configuration includes both proposed leaders
 %% and the other only itself. Additionally, there is not a quorum of either
 %% configuration's servers running.
@@ -253,16 +263,16 @@ candidate(timeout, #state{term=CurrentTerm, me=Me}=State) ->
 %%       when only b and d are running.)
 %%
 %% Thank you EQC for finding this one :)
-candidate(#vote{term=VoteTerm, success=false}, 
-          #state{term=Term, init_config=[_Id, From]}=State) 
+candidate(#vote{term=VoteTerm, success=false},
+          #state{term=Term, init_config=[_Id, From]}=State)
          when VoteTerm > Term ->
     gen_fsm:reply(From, {error, invalid_initial_config}),
     State2 = State#state{init_config=undefined, config=#config{state=blank}},
     NewState = step_down(VoteTerm, State2),
     {next_state, follower, NewState, NewState#state.timer_duration};
 
-%% We are out of date. Go back to follower state. 
-candidate(#vote{term=VoteTerm, success=false}, #state{term=Term}=State) 
+%% We are out of date. Go back to follower state.
+candidate(#vote{term=VoteTerm, success=false}, #state{term=Term}=State)
          when VoteTerm > Term ->
     NewState = step_down(VoteTerm, State),
     {next_state, follower, NewState, NewState#state.timer_duration};
@@ -296,7 +306,7 @@ candidate({set_config, _}, _From, State) ->
 
 %% A Peer is simultaneously trying to become the leader
 %% If it has a higher term, step down and become follower.
-candidate(#request_vote{term=RequestTerm}=RequestVote, _From, 
+candidate(#request_vote{term=RequestTerm}=RequestVote, _From,
           #state{term=Term}=State) when RequestTerm > Term ->
     NewState = step_down(RequestTerm, State),
     handle_request_vote(RequestVote, NewState);
@@ -305,11 +315,11 @@ candidate(#request_vote{}, _From, #state{term=CurrentTerm, me=Me}=State) ->
     {reply, Vote, candidate, State, ?timeout()};
 
 %% Another peer is asserting itself as leader, and it must be correct because
-%% it was elected. We are still in initial config, which must have been a 
-%% misconfiguration. Clear the initial configuration and step down. Since we 
+%% it was elected. We are still in initial config, which must have been a
+%% misconfiguration. Clear the initial configuration and step down. Since we
 %% still have an outstanding client request for inital config send an error
 %% response.
-candidate(#append_entries{term=RequestTerm}, _From, 
+candidate(#append_entries{term=RequestTerm}, _From,
           #state{init_config=[_, Client]}=State) ->
     gen_fsm:reply(Client, {error, invalid_initial_config}),
     %% Set to complete, we don't want another misconfiguration
@@ -318,7 +328,7 @@ candidate(#append_entries{term=RequestTerm}, _From,
     {next_state, follower, State3, State3#state.timer_duration};
 
 %% Same as the above clause, but we don't need to send an error response.
-candidate(#append_entries{term=RequestTerm}, _From, 
+candidate(#append_entries{term=RequestTerm}, _From,
           #state{init_config=no_client}=State) ->
     %% Set to complete, we don't want another misconfiguration
     State2 = State#state{init_config=complete, config=#config{state=blank}},
@@ -334,7 +344,7 @@ candidate(#append_entries{term=RequestTerm}, _From, #state{term=CurrentTerm}=Sta
 candidate(#append_entries{}, _From, State) ->
     {next_state, candidate, State, ?timeout()};
 
-%% We are in the middle of an election. 
+%% We are in the middle of an election.
 %% Leader should always be undefined here.
 candidate({read_op, _}, _, #state{leader=undefined}=State) ->
     {reply, {error, election_in_progress}, candidate, State, ?timeout()};
@@ -344,12 +354,12 @@ candidate({op, _Command}, _From, #state{leader=undefined}=State) ->
 leader(timeout, #state{term=Term, init_config=no_client, config=C}=S) ->
     Duration = heartbeat_timeout(),
     Entry = #rafter_entry{type=config, term=Term, cmd=C},
-    ok = append(Entry, S),
-    State = S#state{init_config=complete, timer_start=os:timestamp(),
+    State0 = append(Entry, S),
+    State = State0#state{init_config=complete, timer_start=os:timestamp(),
                      timer_duration=Duration},
     {next_state, leader, State, Duration};
 
-%% We have just been elected leader because of an initial configuration. 
+%% We have just been elected leader because of an initial configuration.
 %% Append the initial config and set init_config=complete.
 leader(timeout, #state{term=Term, init_config=[Id, From], config=C}=S) ->
     Duration = heartbeat_timeout(),
@@ -362,17 +372,17 @@ leader(timeout, #state{term=Term, init_config=[Id, From], config=C}=S) ->
 leader(timeout, State) ->
     Duration = heartbeat_timeout(),
     NewState = State#state{timer_start=os:timestamp(), timer_duration=Duration},
-    send_append_entries(State),
-    {next_state, leader, NewState, Duration};
+    NewState2 = send_append_entries(State),
+    {next_state, leader, NewState2, Duration};
 
 %% We are out of date. Go back to follower state.
-leader(#append_entries_rpy{term=Term, success=false}, 
+leader(#append_entries_rpy{term=Term, success=false},
        #state{term=CurrentTerm}=State) when Term > CurrentTerm ->
     NewState = step_down(Term, State),
     {next_state, follower, NewState, NewState#state.timer_duration};
 
 %% The follower is not synced yet. Try the previous entry
-leader(#append_entries_rpy{from=From, success=false}, 
+leader(#append_entries_rpy{from=From, success=false},
        #state{followers=Followers, config=C, me=Me}=State) ->
        case lists:member(From, rafter_config:followers(Me, C)) of
            true ->
@@ -387,29 +397,30 @@ leader(#append_entries_rpy{from=From, success=false},
        end;
 
 %% This is a stale reply from an old request. Ignore it.
-leader(#append_entries_rpy{term=Term, success=true}, 
+leader(#append_entries_rpy{term=Term, success=true},
        #state{term=CurrentTerm}=State) when CurrentTerm > Term ->
     {next_state, leader, State, ?timeout()};
 
 %% Success!
-leader(#append_entries_rpy{from=From, success=true, index=Index},
+leader(#append_entries_rpy{from=From, success=true, index=Index}=Rpy,
        #state{followers=Followers, responses=Responses, config=C, me=Me}=State) ->
     case lists:member(From, rafter_config:followers(Me, C)) of
         true ->
-            NewResponses = save_responses(dict:find(From, Responses), Index, Responses, From),
-            State2 = commit(NewResponses, State),
-            case State2#state.leader of
+            NewState = save_rpy(Rpy, State),
+            State2 = maybe_commit(NewState),
+            State3 = maybe_send_read_replies(State2),
+            case State3#state.leader of
                 undefined ->
                     %% We just committed a config that doesn't include ourselves
                     {next_state, follower, State2, ?timeout()};
                 _ ->
-                    case NewResponses of
-                        Responses ->
-                            {next_state, leader, State2, ?timeout()};
-                        _ ->
-                            State3 = send_next_entry(From, Followers, 
-                                NewResponses, State2),
-                            {next_state, leader, State3, ?timeout()}
+                    case State3#state.responses =:= Responses of
+                        true ->
+                            {next_state, leader, State3, ?timeout()};
+                        false ->
+                            State4 = send_next_entry(From, Followers,
+                                NewResponses, State3),
+                            {next_state, leader, State4, ?timeout()}
                     end
             end;
         false ->
@@ -422,13 +433,13 @@ leader(#vote{}, State) ->
     {next_state, leader, State, ?timeout()}.
 
 %% An out of date leader is sending append_entries, tell it to step down.
-leader(#append_entries{term=Term}, _From, #state{term=CurrentTerm, me=Me}=State) 
+leader(#append_entries{term=Term}, _From, #state{term=CurrentTerm, me=Me}=State)
         when Term < CurrentTerm ->
     Rpy = #append_entries_rpy{from=Me, term=CurrentTerm, success=false},
     {reply, Rpy, leader, State, ?timeout()};
 
 %% We are out of date. Step down
-leader(#append_entries{term=Term}, _From, #state{term=CurrentTerm}=State) 
+leader(#append_entries{term=Term}, _From, #state{term=CurrentTerm}=State)
         when Term > CurrentTerm ->
     NewState = step_down(Term, State),
     {next_state, follower, NewState, NewState#state.timer_duration};
@@ -444,7 +455,7 @@ leader(#request_vote{}, _From, #state{me=Me, term=CurrentTerm}=State) ->
     Rpy = #vote{from=Me, term=CurrentTerm, success=false},
     {reply, Rpy, leader, State, ?timeout()};
 
-leader({set_config, {Id, NewServers}}, From, 
+leader({set_config, {Id, NewServers}}, From,
        #state{me=Me, followers=F, term=Term, config=C}=State) ->
     case rafter_config:allow_config(C, NewServers) of
         true ->
@@ -458,18 +469,18 @@ leader({set_config, {Id, NewServers}}, From,
     end;
 
 %% Handle client requests
-leader({read_op, Command}, _, #state{state_machine=StateMachine}=State) ->
-    {ok, Reply} = StateMachine:read(Command),
-    {reply, Reply, leader, State, ?timeout()};
+leader({read_op, {Id, Command}}, From, State) ->
+    NewState = setup_read_request(Id, From, Command, State),
+    {next_state, leader, NewState, ?timeout()};
 
-leader({op, {Id, Command }}, From, 
+leader({op, {Id, Command}}, From,
         #state{term=Term}=State) ->
     Entry = #rafter_entry{type=op, term=Term, cmd=Command},
     NewState = append(Id, From, Entry, State, leader),
     {next_state, leader, NewState, ?timeout()}.
-    
+
 %%=============================================================================
-%% Internal Functions 
+%% Internal Functions
 %%=============================================================================
 
 no_leader_error(Me, Config) ->
@@ -516,36 +527,58 @@ remove_followers(Servers, Followers0) ->
 -spec append(#rafter_entry{}, #state{}) -> #state{}.
 append(Entry, #state{me=Me}=State) ->
     {ok, _Index} = rafter_log:append(Me, [Entry]),
-    send_append_entries(State),
-    ok.
+    send_append_entries(State).
 
 -spec append(binary(), term(), #rafter_entry{}, #state{}, leader) ->#state{}.
 append(Id, From, Entry, State, leader) ->
     NewState = append(Id, From, Entry, State),
-    send_append_entries(NewState),
-    NewState.
+    send_append_entries(NewState).
 
 -spec append(binary(), term(), #rafter_entry{}, #state{}) -> #state{}.
-append(Id, From, Entry, 
+append(Id, From, Entry,
        #state{me=Me, term=Term, client_reqs=Reqs}=State) ->
     {ok, Index} = rafter_log:append(Me, [Entry]),
     {ok, Timer} = timer:send_after(?CLIENT_TIMEOUT, Me, {client_timeout, Id}),
     ClientRequest = #client_req{id=Id,
-                                from=From, 
-                                index=Index, 
-                                term=Term, 
+                                from=From,
+                                index=Index,
+                                term=Term,
                                 timer=Timer},
     State#state{client_reqs=[ClientRequest | Reqs]}.
+
+setup_read_request(Id, From, Command, #state{send_clock=Clock,
+                                             term=Term}=State) ->
+    {ok, Timer} = timer:send_after(?CLIENT_TIMEOUT, Me,
+        {client_read_timeout, Clock, Id},
+    ReadRequest = #client_req{id=Id,
+                              from=From,
+                              term=Term,
+                              cmd=Command,
+                              timer=Timer},
+    NewState = save_read_request(ReadRequest, State),
+    send_append_entries(NewState).
+
+save_read_request(ReadRequest, #state{send_clock=Clock,
+                                      read_reqs=Requests}=State) ->
+    NewRequests =
+        case orddict:find(Clock, Requests) of
+            {ok, ReadRequests} ->
+                orddict:store(Clock, [ReadRequest | ReadRequests], Requests);
+            error ->
+                orddict:store(Clock, [ReadRequest])
+        end,
+        State#state{read_reqs=NewRequests}.
 
 send_client_timeout_reply(#client_req{from=From}) ->
     gen_fsm:reply(From, {error, timeout}).
 
-send_client_reply(#client_req{from=From}, Result) ->
+send_client_reply(#client_req{timer=Timer, from=From}, Result) ->
+    {ok, cancel} = timer:cancel(Timer),
     gen_fsm:reply(From, Result).
 
 find_client_req(Id, ClientRequests) ->
     Result = lists:filter(fun(Req) ->
-                              Req#client_req.id =:= Id 
+                              Req#client_req.id =:= Id
                           end, ClientRequests),
     case Result of
         [Request] ->
@@ -556,7 +589,7 @@ find_client_req(Id, ClientRequests) ->
 
 delete_client_req(Id, ClientRequests) ->
     lists:filter(fun(Req) ->
-                     Req#client_req.id =/= Id 
+                     Req#client_req.id =/= Id
                  end, ClientRequests).
 
 find_client_req_by_index(Index, ClientRequests) ->
@@ -574,16 +607,16 @@ delete_client_req_by_index(Index, ClientRequests) ->
     lists:filter(fun(Req) ->
                     Req#client_req.index =/= Index
                  end, ClientRequests).
-                    
+
 %% @doc Commit entries between the previous commit index and the new one.
 %%      Apply them to the local state machine and respond to any outstanding
 %%      client requests that these commits affect. Return the new state.
 %%      Ignore already committed entries.
 -spec commit_entries(non_neg_integer(), #state{}) -> #state{}.
 commit_entries(NewCommitIndex, #state{commit_index=CommitIndex}=State)
-        when CommitIndex >= NewCommitIndex -> 
+        when CommitIndex >= NewCommitIndex ->
     State;
-commit_entries(NewCommitIndex, #state{commit_index=CommitIndex, 
+commit_entries(NewCommitIndex, #state{commit_index=CommitIndex,
                                       state_machine=StateMachine, me=Me}=State) ->
    LastIndex = min(rafter_log:get_last_index(Me), NewCommitIndex),
    lists:foldl(fun(Index, #state{client_reqs=CliReqs}=State1) ->
@@ -595,10 +628,10 @@ commit_entries(NewCommitIndex, #state{commit_index=CommitIndex,
                Result = StateMachine:write(Command),
                maybe_send_client_reply(Index, CliReqs, NewState, Result);
 
-           %% We have a committed transitional state, so reply 
+           %% We have a committed transitional state, so reply
            %% successfully to the client. Then set the new stable
-           %% configuration. 
-           {ok, #rafter_entry{type=config, 
+           %% configuration.
+           {ok, #rafter_entry{type=config,
                    cmd=#config{state=transitional}=C}} ->
                S = stabilize_config(C, NewState),
                Reply = {ok, S#state.config},
@@ -606,7 +639,7 @@ commit_entries(NewCommitIndex, #state{commit_index=CommitIndex,
 
            %% The configuration has already been set. Initial configuration goes
            %% directly to stable state so needs to send a reply. Checking for
-           %% a client request is expensive, but config changes happen 
+           %% a client request is expensive, but config changes happen
            %% infrequently.
            {ok, #rafter_entry{type=config,
                    cmd=#config{state=stable}}} ->
@@ -616,18 +649,17 @@ commit_entries(NewCommitIndex, #state{commit_index=CommitIndex,
    end, State, lists:seq(CommitIndex+1, LastIndex)).
 
 -spec stabilize_config(#config{}, #state{}) -> #state{}.
-stabilize_config(#config{state=transitional, newservers=New}=C, 
+stabilize_config(#config{state=transitional, newservers=New}=C,
     #state{me=Me, term=Term}=S) when S#state.leader =:= S#state.me ->
         Config = C#config{state=stable, oldservers=New, newservers=[]},
         Entry = #rafter_entry{type=config, term=Term, cmd=Config},
         State = S#state{config=Config},
         {ok, _Index} = rafter_log:append(Me, [Entry]),
-        send_append_entries(State),
-        State;
+        send_append_entries(State);
 stabilize_config(_, State) ->
     State.
 
--spec maybe_send_client_reply(non_neg_integer(), [#client_req{}], #state{}, 
+-spec maybe_send_client_reply(non_neg_integer(), [#client_req{}], #state{},
                               term()) -> #state{}.
 maybe_send_client_reply(Index, CliReqs, S, Result) when S#state.leader =:= S#state.me ->
     case find_client_req_by_index(Index, CliReqs) of
@@ -636,14 +668,44 @@ maybe_send_client_reply(Index, CliReqs, S, Result) when S#state.leader =:= S#sta
             Reqs = delete_client_req_by_index(Index, CliReqs),
             S#state{client_reqs=Reqs};
         not_found ->
-            S 
+            S
     end;
 maybe_send_client_reply(_, _, State, _) ->
     State.
 
-commit(Responses, #state{me=Me, 
-                         commit_index=CommitIndex, 
-                         config=Config}=State) ->
+maybe_send_read_replies(#state{me=Me,
+                             config=Config,
+                             state_machine=StateMachine,
+                             send_clock_responses=Responses}=State) ->
+    Clock = rafter_config:quorum_min(Me, Config, Responses),
+    {ok, Requests, NewState} = find_eligible_read_requests(Clock, State),
+    send_client_read_replies(Requests, StateMachine),
+    NewState.
+
+eligible_request(SendClock) ->
+    fun({Clock, _}) ->
+        SendClock > Clock
+    end.
+
+find_eligible_read_requests(SendClock, #state{read_reqs=Requests}=State) ->
+    EligibleReq = eligible_request(SendClock),
+    Eligible = lists:takewhile(EligibleReq, Requests),
+    NewRequests = lists:dropwhile(EligibleReq, Requests),
+    NewState = State#state{read_reqs=NewRequests},
+    {ok, Eligible, NewState}.
+
+send_client_read_replies([], _StateMachine) ->
+    ok;
+send_client_read_replies(Requests, StateMachine) ->
+    lists:map(fun({clock, ClientReqs}) ->
+                [send_client_reply(R, StateMachine:read(R#client_req.cmd))
+                    || R <- ClientReqs].
+              end, Requests).
+
+maybe_commit(#state{me=Me,
+                    commit_index=CommitIndex,
+                    config=Config,
+                    responses=Responses}=State) ->
     Min = rafter_config:quorum_min(Me, Config, Responses),
     case Min > CommitIndex andalso safe_to_commit(Min, State) of
         true ->
@@ -663,6 +725,8 @@ safe_to_commit(Index, #state{term=CurrentTerm, me=Me}) ->
     CurrentTerm =:= rafter_log:get_term(Me, Index).
 
 %% We are about to transition to the follower state. Reset the necessary state.
+%% TODO: send errors to any outstanding client read or write requests and cleanup
+%% timers
 step_down(NewTerm, #state{me=Me}=State) ->
     ok = rafter_log:set_metadata(Me, undefined, NewTerm),
     State#state{term=NewTerm,
@@ -672,16 +736,26 @@ step_down(NewTerm, #state{me=Me}=State) ->
                 voted_for=undefined,
                 leader=undefined}.
 
-save_responses({ok, LastIndex}, Index, Responses, _From) when LastIndex > Index ->
-    Responses;
-save_responses({ok, Index}, Index, Responses, _From) ->
-    Responses;
-save_responses({ok, _LastIndex}, Index, Responses, From) ->
-    dict:store(From, Index, Responses);
-save_responses(error, Index, Responses, From) ->
-    dict:store(From, Index, Responses).
+save_rpy(#append_entries_rpy{from=From, index=Index, send_clock=Clock},
+         #state{responses=Responses, send_clock_responses=ClockResponses}=State) ->
+    NewResponses = save_greater(From, Index, Responses),
+    NewClockResponses = save_greater(From, Clock, ClockResponses),
+    State#state{responses=NewResponses, send_clock_responses=NewClockResponses}.
 
-handle_request_vote(#request_vote{from=CandidateId, term=Term}=RequestVote, 
+save_greater(Key, Val, Dict) ->
+    CurrentVal = dict:find(Key, Dict),
+    save_greater(Key, Val, Dict, CurrentVal).
+
+save_greater(Key, Val, Dict, {ok, CurrentVal}) when CurrentVal > Val ->
+    Dict;
+save_greater(Key, CurrentVal, Dict, {ok, CurrentVal}) ->
+    Dict;
+save_greater(Key, Val, Dict, {ok, _}) ->
+    dict:store(Key, Val, Dict);
+save_greater(Key, Val, Dict, error) ->
+    dict:store(Key, Val, Dict).
+
+handle_request_vote(#request_vote{from=CandidateId, term=Term}=RequestVote,
   #state{me=Me}=State) ->
     State2 = set_term(Term, State),
     {ok, Vote} = vote(RequestVote, State2),
@@ -689,49 +763,62 @@ handle_request_vote(#request_vote{from=CandidateId, term=Term}=RequestVote,
         true ->
             ok = rafter_log:set_metadata(Me, CandidateId, State2#state.term),
             Duration = election_timeout(),
-            State3 = State2#state{voted_for=CandidateId, 
-                                  timer_duration=Duration, 
+            State3 = State2#state{voted_for=CandidateId,
+                                  timer_duration=Duration,
                                   timer_start=os:timestamp()},
             {reply, Vote, follower, State3, Duration};
         false ->
             {reply, Vote, follower, State2, ?timeout()}
     end.
 
-maybe_send_entry(_Peer, Index, LastLogIndex, _State) 
+maybe_send_entry(_Peer, Index, LastLogIndex, _State)
         when LastLogIndex < Index ->
     ok;
 maybe_send_entry(Peer, Index, LastLogIndex, State)
         when LastLogIndex >= Index ->
     send_entry(Peer, Index, State).
 
-send_entry(Peer, Index, #state{me=Me, term=Term, commit_index=CIdx}) ->
-    {PrevLogIndex, PrevLogTerm} = 
-        case Index - 1 of
-            0 -> 
-                {0, 0};
-            PrevIndex ->
-                {PrevIndex,
-                  rafter_log:get_term(Me, PrevIndex)}
-        end,
-    Entries = case rafter_log:get_entry(Me, Index) of
-                  {ok, not_found} -> 
-                      [];
-                  {ok, Entry} -> 
-                      [Entry]
-              end,
+get_prev(Me, Index) ->
+    case Index - 1 of
+        0 ->
+            {0, 0};
+        PrevIndex ->
+            {PrevIndex,
+                rafter_log:get_term(Me, PrevIndex)}
+    end.
+
+%% TODO: Return a block of entries if more than one exist
+get_entries(Me, Index) ->
+    case rafter_log:get_entry(Me, Index) of
+        {ok, not_found} ->
+            [];
+        {ok, Entry} ->
+            [Entry]
+    end.
+
+send_entry(Peer, Index, #state{me=Me,
+                               term=Term,
+                               send_clock=Clock,
+                               commit_index=CIdx}) ->
+    {PrevLogIndex, PrevLogTerm} = get_prev(Me, Index),
+    Entries = get_entries(Me, Index),
     AppendEntries = #append_entries{term=Term,
                                     from=Me,
                                     prev_log_index=PrevLogIndex,
                                     prev_log_term=PrevLogTerm,
                                     entries=Entries,
-                                    commit_index=CIdx},
+                                    commit_index=CIdx,
+                                    send_clock=Clock},
     rafter_requester:send(Peer, AppendEntries).
 
-send_append_entries(#state{followers=Followers}=State) ->
-    [send_entry(Peer, Index, State) || {Peer, Index} <- dict:to_list(Followers)].
+send_append_entries(#state{followers=Followers, send_clock=SendClock}=State) ->
+    NewState = State#state{send_clock=SendClock+1},
+    [send_entry(Peer, Index, NewState) ||
+        {Peer, Index} <- dict:to_list(Followers)],
+    NewState.
 
 increment_follower_index(From, Followers) ->
-    {ok, Num} = dict:find(From, Followers), 
+    {ok, Num} = dict:find(From, Followers),
     Num + 1.
 
 decrement_follower_index(From, Followers) ->
@@ -742,24 +829,27 @@ decrement_follower_index(From, Followers) ->
             Num - 1
     end.
 
-%% @doc Start a process to send a syncrhonous rpc to each peer. Votes will be sent 
+%% @doc Start a process to send a syncrhonous rpc to each peer. Votes will be sent
 %%      back as messages when the process receives them from the peer. If
 %%      there is an error or a timeout no message is sent. This helps preserve
-%%      the asynchrnony of the consensus fsm, while maintaining the rpc 
+%%      the asynchrnony of the consensus fsm, while maintaining the rpc
 %%      semantics for the request_vote message as described in the raft paper.
 request_votes(#state{config=Config, term=Term, me=Me}) ->
     Voters = rafter_config:voters(Me, Config),
     Msg = #request_vote{term=Term,
                         from=Me,
-                        last_log_index=rafter_log:get_last_index(Me), 
+                        last_log_index=rafter_log:get_last_index(Me),
                         last_log_term=rafter_log:get_last_term(Me)},
     [rafter_requester:send(Peer, Msg) || Peer <- Voters].
 
 become_leader(#state{me=Me}=State) ->
     %% TODO: Commit a noop entry to the log so we can move the commit index
-    State#state{leader=Me, 
+    State#state{leader=Me,
                 responses=dict:new(),
                 followers=initialize_followers(State),
+                send_clock = 0,
+                send_clock_responses = dict:new(),
+                read_reqs = orddict:new(),
                 timer_start=os:timestamp()}.
 
 initialize_followers(#state{me=Me, config=Config}) ->
@@ -769,10 +859,10 @@ initialize_followers(#state{me=Me, config=Config}) ->
     dict:from_list(Followers).
 
 %% There is no entry at t=0, so just return true.
-consistency_check(#append_entries{prev_log_index=0, 
+consistency_check(#append_entries{prev_log_index=0,
                                   prev_log_term=0}, _State) ->
     true;
-consistency_check(#append_entries{prev_log_index=Index, 
+consistency_check(#append_entries{prev_log_index=Index,
                                   prev_log_term=Term}, #state{me=Me}) ->
     case rafter_log:get_entry(Me, Index) of
         {ok, not_found} ->
@@ -791,17 +881,17 @@ set_term(Term, #state{term=CurrentTerm, me=Me}=State) when Term > CurrentTerm ->
 set_term(Term, #state{term=Term}=State) ->
     State.
 
-vote(#request_vote{term=Term}, #state{term=CurrentTerm, me=Me}) 
+vote(#request_vote{term=Term}, #state{term=CurrentTerm, me=Me})
         when Term < CurrentTerm ->
     fail_vote(CurrentTerm, Me);
-vote(#request_vote{from=CandidateId, term=CurrentTerm}=RequestVote, 
+vote(#request_vote{from=CandidateId, term=CurrentTerm}=RequestVote,
      #state{voted_for=CandidateId, term=CurrentTerm, me=Me}=State) ->
     maybe_successful_vote(RequestVote, CurrentTerm, Me, State);
-vote(#request_vote{term=CurrentTerm}=RequestVote, 
+vote(#request_vote{term=CurrentTerm}=RequestVote,
      #state{voted_for=undefined, term=CurrentTerm, me=Me}=State) ->
     maybe_successful_vote(RequestVote, CurrentTerm, Me, State);
-vote(#request_vote{from=CandidateId, term=CurrentTerm}, 
-     #state{voted_for=AnotherId, term=CurrentTerm, me=Me}) 
+vote(#request_vote{from=CandidateId, term=CurrentTerm},
+     #state{voted_for=AnotherId, term=CurrentTerm, me=Me})
      when AnotherId =/= CandidateId ->
     fail_vote(CurrentTerm, Me).
 
@@ -814,13 +904,13 @@ maybe_successful_vote(RequestVote, CurrentTerm, Me, State) ->
     end.
 
 candidate_log_up_to_date(#request_vote{last_log_term=CandidateTerm,
-                                       last_log_index=CandidateIndex}, 
+                                       last_log_index=CandidateIndex},
                          #state{me=Me}) ->
-    candidate_log_up_to_date(CandidateTerm, 
-                             CandidateIndex, 
-                             rafter_log:get_last_term(Me), 
+    candidate_log_up_to_date(CandidateTerm,
+                             CandidateIndex,
+                             rafter_log:get_last_term(Me),
                              rafter_log:get_last_index(Me)).
-            
+
 candidate_log_up_to_date(CandidateTerm, _CandidateIndex, LogTerm, _LogIndex)
     when CandidateTerm > LogTerm ->
         true;
@@ -857,7 +947,7 @@ heartbeat_timeout() ->
     ?HEARTBEAT_TIMEOUT.
 
 %%=============================================================================
-%% Tests 
+%% Tests
 %%=============================================================================
 
 -ifdef(TEST).

@@ -16,9 +16,9 @@ stop() ->
     catch ets:delete(rafter_backend_ets_tables).
 
 read({get, Table, Key}) ->
-    try 
+    try
         case ets:lookup(Table, Key) of
-            [{Key, Value}] -> 
+            [{Key, Value}] ->
                 {ok, Value};
             [] ->
                 {ok, not_found}
@@ -47,7 +47,7 @@ write({new, Name}) ->
     end;
 
 write({put, Table, Key, Value}) ->
-    try 
+    try
         ets:insert(Table, {Key, Value}),
         {ok, Value}
     catch _:E ->

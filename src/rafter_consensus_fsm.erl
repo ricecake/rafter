@@ -567,7 +567,7 @@ save_read_request(ReadRequest, #state{send_clock=Clock,
             {ok, ReadRequests} ->
                 orddict:store(Clock, [ReadRequest | ReadRequests], Requests);
             error ->
-                orddict:store(Clock, [ReadRequest])
+                orddict:store(Clock, [ReadRequest], Requests)
         end,
         State#state{read_reqs=NewRequests}.
 
@@ -699,7 +699,7 @@ find_eligible_read_requests(SendClock, #state{read_reqs=Requests}=State) ->
 send_client_read_replies([], _StateMachine) ->
     ok;
 send_client_read_replies(Requests, StateMachine) ->
-    lists:map(fun({clock, ClientReqs}) ->
+    lists:map(fun({_Clock, ClientReqs}) ->
                 [send_client_reply(R, StateMachine:read(R#client_req.cmd))
                     || R <- ClientReqs]
               end, Requests).

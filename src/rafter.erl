@@ -63,5 +63,5 @@ start_test_node(Name) ->
     application:start(lager),
     application:start(rafter),
     Me = {Name, node()},
-    Opts = #rafter_opts{state_machine=rafter_backend_ets, logdir="./"},
+    Opts = #rafter_opts{state_machine=rafter_backend_ets, logdir="./data"},
     start_node(Me, Opts).

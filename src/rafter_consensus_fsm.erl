@@ -394,9 +394,9 @@ leader(#append_entries_rpy{from=From, success=false},
        case lists:member(From, rafter_config:followers(Me, C)) of
            true ->
                NextIndex = decrement_follower_index(From, Followers),
-               NewState = State#state{followers=dict:store(From, NextIndex, Followers)},
                LastLogIndex = rafter_log:get_last_index(Me),
-               maybe_send_entry(From, NextIndex, LastLogIndex, NewState),
+               NewState =
+                   maybe_send_entry(From, NextIndex, LastLogIndex, State),
                {next_state, leader, NewState, ?timeout()};
            false ->
                %% This is a reply from a previous configuration. Ignore it.
@@ -410,7 +410,7 @@ leader(#append_entries_rpy{term=Term, success=true},
 
 %% Success!
 leader(#append_entries_rpy{from=From, success=true}=Rpy,
-       #state{followers=Followers, responses=Responses, config=C, me=Me}=State) ->
+       #state{followers=Followers, config=C, me=Me}=State) ->
     case lists:member(From, rafter_config:followers(Me, C)) of
         true ->
             NewState = save_rpy(Rpy, State),
@@ -421,15 +421,10 @@ leader(#append_entries_rpy{from=From, success=true}=Rpy,
                     %% We just committed a config that doesn't include ourselves
                     {next_state, follower, State3, ?timeout()};
                 _ ->
-                    NewResponses = State3#state.responses,
-                    case NewResponses =:= Responses of
-                        true ->
-                            {next_state, leader, State3, ?timeout()};
-                        false ->
-                            State4 = send_next_entry(From, Followers,
-                                NewResponses, State3),
-                            {next_state, leader, State4, ?timeout()}
-                    end
+                    Responses = State3#state.responses,
+                    State4 =
+                        maybe_send_next_entry(From, Followers, Responses, State3),
+                    {next_state, leader, State4, ?timeout()}
             end;
         false ->
             %% This is a reply from a previous configuration. Ignore it.
@@ -499,14 +494,11 @@ no_leader_error(Me, Config) ->
             election_in_progress
     end.
 
-send_next_entry(From, Followers, Responses, #state{me=Me}=State) ->
+maybe_send_next_entry(From, Followers, Responses, #state{me=Me}=State) ->
     NextIndex = increment_follower_index(From, Followers),
-    NewState = State#state{followers=dict:store(From, NextIndex, Followers),
-                           responses=Responses},
+    NewState = State#state{responses=Responses},
     LastLogIndex = rafter_log:get_last_index(Me),
-    maybe_send_entry(From, NextIndex, LastLogIndex, NewState),
-    NewState.
-
+    maybe_send_entry(From, NextIndex, LastLogIndex, NewState).
 
 -spec reconfig(term(), dict(), #config{}, list(), #state{}) -> {dict(), #config{}}.
 reconfig(Me, OldFollowers, Config0, NewServers, State) ->
@@ -632,7 +624,7 @@ commit_entries(NewCommitIndex, #state{commit_index=CommitIndex,
        NewState = State1#state{commit_index=Index},
        case rafter_log:get_entry(Me, Index) of
 
-           %% Noop - Ignore this beautiful request
+           %% Noop - Ignore this request
            {ok, #rafter_entry{type=noop}} ->
                NewState;
 
@@ -784,12 +776,17 @@ handle_request_vote(#request_vote{from=CandidateId, term=Term}=RequestVote,
             {reply, Vote, follower, State2, ?timeout()}
     end.
 
-maybe_send_entry(_Peer, Index, LastLogIndex, _State)
-        when LastLogIndex < Index ->
-    ok;
-maybe_send_entry(Peer, Index, LastLogIndex, State)
-        when LastLogIndex >= Index ->
-    send_entry(Peer, Index, State).
+maybe_send_entry(Peer, NextIndex, LastLogIndex,
+    State=#state{followers=Followers}) when LastLogIndex < NextIndex ->
+        NewState =
+            State#state{followers=dict:store(Peer, LastLogIndex+1, Followers)},
+        send_entry(Peer, LastLogIndex+1, NewState),
+        NewState;
+maybe_send_entry(Peer, NextIndex, LastLogIndex,
+    State=#state{followers=Followers}) when LastLogIndex >= NextIndex ->
+        NewState = State#state{followers=dict:store(Peer, NextIndex, Followers)},
+        send_entry(Peer, NextIndex, NewState),
+        NewState.
 
 get_prev(Me, Index) ->
     case Index - 1 of

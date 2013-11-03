@@ -15,11 +15,8 @@
     commit_index = 0 :: non_neg_integer(),
     init_config :: undefined | list() | complete,
 
-    %% The last time a timer was created
-    timer_start :: non_neg_integer(),
-
-    %% The duration of the timer
-    timer_duration :: non_neg_integer(),
+    %% Used for Election and Heartbeat timeouts
+    timer :: timer:tref(),
 
     %% leader state: contains nextIndex for each peer
     followers = dict:new() :: dict(),

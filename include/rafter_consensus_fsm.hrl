@@ -46,5 +46,6 @@
 
     config :: term(),
 
-    %% We allow pluggable state machine modules.
-    state_machine :: atom()}).
+    %% We allow pluggable backend state machine modules.
+    state_machine :: atom(),
+    backend_state :: term()}).

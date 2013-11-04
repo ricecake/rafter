@@ -9,7 +9,7 @@
 -define(CLIENT_TIMEOUT, 2000).
 -define(ELECTION_TIMEOUT_MIN, 500).
 -define(ELECTION_TIMEOUT_MAX, 1000).
--define(HEARTBEAT_TIMEOUT, 100).
+-define(HEARTBEAT_TIMEOUT, 25).
 
 %% API
 -export([start/0, stop/1, start/1, start_link/3, read_op/2, op/2,
@@ -36,8 +36,8 @@ start(Me) ->
     gen_fsm:start({local, Me}, ?MODULE, [Me], []).
 
 start_link(NameAtom, Me, Opts) ->
-    gen_fsm:start_link({local, NameAtom}, ?MODULE, [Me, Opts], []).
-    %%gen_fsm:start_link({local, NameAtom}, ?MODULE, [Me, Opts], [{debug, [trace]}]).
+    %%gen_fsm:start_link({local, NameAtom}, ?MODULE, [Me, Opts], []).
+    gen_fsm:start_link({local, NameAtom}, ?MODULE, [Me, Opts], [{debug, [trace]}]).
 
 op(Peer, Command) ->
     gen_fsm:sync_send_event(Peer, {op, Command}).
@@ -67,14 +67,15 @@ init([Me, #rafter_opts{state_machine=StateMachine}]) ->
     random:seed(),
     Timer = gen_fsm:send_event_after(election_timeout(), timeout),
     #meta{voted_for=VotedFor, term=Term} = rafter_log:get_metadata(Me),
+    BackendState = StateMachine:init(Me),
     State = #state{term=Term,
                    voted_for=VotedFor,
                    me=Me,
                    responses=dict:new(),
                    followers=dict:new(),
                    timer=Timer,
-                   state_machine=StateMachine},
-    ok = StateMachine:init(),
+                   state_machine=StateMachine,
+                   backend_state=BackendState},
     Config = rafter_log:get_config(Me),
     NewState =
         case Config#config.state of
@@ -164,12 +165,17 @@ follower(#append_entries{term=Term, from=From, prev_log_index=PrevLogIndex,
                          send_clock=Clock}=AppendEntries,
          _From, #state{me=Me}=State) ->
     State2=set_term(Term, State),
-    Rpy = #append_entries_rpy{send_clock=Clock, term=Term, success=false, from=Me},
-    case consistency_check(AppendEntries, State2) of
+    Rpy = #append_entries_rpy{send_clock=Clock,
+                              term=Term,
+                              success=false,
+                              from=Me},
+    %% Always reset the election timer here, since the leader is valid,
+    %% but may have conflicting data to sync
+    State3 = reset_timer(election_timeout(), State2),
+    case consistency_check(AppendEntries, State3) of
         false ->
-            {reply, Rpy, follower, State2};
+            {reply, Rpy, follower, State3};
         true ->
-            State3 = reset_timer(election_timeout(), State2),
             {ok, CurrentIndex} = rafter_log:check_and_append(Me,
                 Entries, PrevLogIndex+1),
             Config = rafter_log:get_config(Me),
@@ -588,7 +594,9 @@ commit_entries(NewCommitIndex, #state{commit_index=CommitIndex}=State)
         when CommitIndex >= NewCommitIndex ->
     State;
 commit_entries(NewCommitIndex, #state{commit_index=CommitIndex,
-                                      state_machine=StateMachine, me=Me}=State) ->
+                                      state_machine=StateMachine,
+                                      backend_state=BackendState,
+                                      me=Me}=State) ->
    LastIndex = min(rafter_log:get_last_index(Me), NewCommitIndex),
    lists:foldl(fun(Index, #state{client_reqs=CliReqs}=State1) ->
        NewState = State1#state{commit_index=Index},
@@ -600,8 +608,10 @@ commit_entries(NewCommitIndex, #state{commit_index=CommitIndex,
 
            %% Normal Operation. Apply Command to StateMachine.
            {ok, #rafter_entry{type=op, cmd=Command}} ->
-               Result = StateMachine:write(Command),
-               maybe_send_client_reply(Index, CliReqs, NewState, Result);
+               {Result, NewBackendState} =
+                   StateMachine:write(Command, BackendState),
+               NewState2 = NewState#state{backend_state=NewBackendState},
+               maybe_send_client_reply(Index, CliReqs, NewState2, Result);
 
            %% We have a committed transitional state, so reply
            %% successfully to the client. Then set the new stable
@@ -650,11 +660,10 @@ maybe_send_client_reply(_, _, State, _) ->
 
 maybe_send_read_replies(#state{me=Me,
                              config=Config,
-                             state_machine=StateMachine,
-                             send_clock_responses=Responses}=State) ->
+                             send_clock_responses=Responses}=State0) ->
     Clock = rafter_config:quorum_min(Me, Config, Responses),
-    {ok, Requests, NewState} = find_eligible_read_requests(Clock, State),
-    send_client_read_replies(Requests, StateMachine),
+    {ok, Requests, State} = find_eligible_read_requests(Clock, State0),
+    NewState = send_client_read_replies(Requests, State),
     NewState.
 
 eligible_request(SendClock) ->
@@ -669,13 +678,23 @@ find_eligible_read_requests(SendClock, #state{read_reqs=Requests}=State) ->
     NewState = State#state{read_reqs=NewRequests},
     {ok, Eligible, NewState}.
 
-send_client_read_replies([], _StateMachine) ->
-    ok;
-send_client_read_replies(Requests, StateMachine) ->
-    lists:map(fun({_Clock, ClientReqs}) ->
-                [send_client_reply(R, StateMachine:read(R#client_req.cmd))
-                    || R <- ClientReqs]
-              end, Requests).
+send_client_read_replies([], State) ->
+    State;
+send_client_read_replies(Requests, State=#state{state_machine=StateMachine,
+                                                backend_state=BackendState}) ->
+    NewBackendState =
+        lists:foldl(fun({_Clock, ClientReqs}, BeState) ->
+                        read_and_send(ClientReqs, StateMachine, BeState)
+                    end, BackendState, Requests),
+    State#state{backend_state=NewBackendState}.
+
+read_and_send(ClientRequests, StateMachine, BackendState) ->
+    lists:foldl(fun(Req, Acc) ->
+                    {Val, NewAcc} =
+                    StateMachine:read(Req#client_req.cmd, Acc),
+                    send_client_reply(Req, Val),
+                    NewAcc
+                end, BackendState, ClientRequests).
 
 maybe_commit(#state{me=Me,
                     commit_index=CommitIndex,

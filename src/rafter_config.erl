@@ -13,14 +13,15 @@
 -spec quorum_min(term(), #config{} | [], dict()) -> non_neg_integer().
 quorum_min(_Me, #config{state=blank}, _) ->
     0;
-quorum_min(Me, #config{state=stable, oldservers=OldServers}, Responses) ->
-    quorum_min(Me, OldServers, Responses);
-quorum_min(Me, #config{state=staging, oldservers=OldServers}, Responses) ->
-    quorum_min(Me, OldServers, Responses);
+quorum_min(Me, #config{state=stable, oldvstruct=OldServers}, Responses) ->
+    quorum_min(Me, rafter_voting:to_list(OldServers), Responses);
+quorum_min(Me, #config{state=staging, oldvstruct=OldServers}, Responses) ->
+    quorum_min(Me, rafter_voting:to_list(OldServers), Responses);
 quorum_min(Me, #config{state=transitional,
-                   oldservers=Old,
-                   newservers=New}, Responses) ->
-    min(quorum_min(Me, Old, Responses), quorum_min(Me, New, Responses));
+                   oldvstruct=Old,
+                   newvstruct=New}, Responses) ->
+    min(quorum_min(Me, rafter_voting:to_list(Old), Responses),
+        quorum_min(Me, rafter_voting:to_list(New), Responses));
 
 %% Responses doesn't contain the local response so it will be marked as 0
 %% when it's a member of the consensus group. In this case we must
@@ -36,14 +37,14 @@ quorum_min(Me, Servers, Responses) ->
             lists:nth(length(Indexes) div 2 + 1, Indexes)
     end.
 
--spec quorum(term(), #config{} | list(), dict()) -> boolean().
+-spec quorum(term(), #config{} | #vstruct{}, dict()) -> boolean().
 quorum(_Me, #config{state=blank}, _Responses) ->
     false;
-quorum(Me, #config{state=stable, oldservers=OldServers}, Responses) ->
+quorum(Me, #config{state=stable, oldvstruct=OldServers}, Responses) ->
     quorum(Me, OldServers, Responses);
-quorum(Me, #config{state=staging, oldservers=OldServers}, Responses) ->
+quorum(Me, #config{state=staging, oldvstruct=OldServers}, Responses) ->
     quorum(Me, OldServers, Responses);
-quorum(Me, #config{state=transitional, oldservers=Old, newservers=New}, Responses) ->
+quorum(Me, #config{state=transitional, oldvstruct=Old, newvstruct=New}, Responses) ->
     quorum(Me, Old, Responses) andalso quorum(Me, New, Responses);
 
 %% Responses doesn't contain a local vote which must be true if the local
@@ -69,42 +70,49 @@ voters(Me, Config) ->
 
 %% @doc list of all voters
 -spec voters(#config{}) -> list().
-voters(#config{state=transitional, oldservers=Old, newservers=New}) ->
-    sets:to_list(sets:from_list(Old ++ New));
-voters(#config{oldservers=Old}) ->
-    Old.
+voters(#config{state=transitional, oldvstruct=Old, newvstruct=New}) ->
+    sets:to_list(sets:from_list(
+                   rafter_voting:to_list(Old) ++ rafter_voting:to_list(New)));
+voters(#config{oldvstruct=Old}) ->
+    rafter_voting:to_list(Old).
 
 -spec has_vote(term(), #config{}) -> boolean().
 has_vote(_Me, #config{state=blank}) ->
     false;
-has_vote(Me, #config{state=transitional, oldservers=Old, newservers=New})->
-    lists:member(Me, Old) orelse lists:member(Me, New);
-has_vote(Me, #config{oldservers=Old}) ->
-    lists:member(Me, Old).
+has_vote(Me, #config{state=transitional, oldvstruct=Old, newvstruct=New})->
+    lists:member(Me, rafter_voting:to_list(Old)) orelse
+    lists:member(Me, rafter_voting:to_list(New));
+has_vote(Me, #config{oldvstruct=Old}) ->
+    lists:member(Me, rafter_voting:to_list(Old)).
 
 %% @doc All followers. In staging, some followers are not voters.
 -spec followers(term(), #config{}) -> list().
-followers(Me, #config{state=transitional, oldservers=Old, newservers=New}) ->
-    lists:delete(Me, sets:to_list(sets:from_list(Old ++ New)));
-followers(Me, #config{state=staging, oldservers=Old, newservers=New}) ->
-    lists:delete(Me, sets:to_list(sets:from_list(Old ++ New)));
-followers(Me, #config{oldservers=Old}) ->
-    lists:delete(Me, Old).
+followers(Me, #config{state=transitional, oldvstruct=Old, newvstruct=New}) ->
+    lists:delete(Me, sets:to_list(sets:from_list(
+                                    rafter_voting:to_list(Old) ++
+                                    rafter_voting:to_list(New))));
+followers(Me, #config{state=staging, oldvstruct=Old, newvstruct=New}) ->
+    lists:delete(Me, sets:to_list(sets:from_list(
+                                    rafter_voting:to_list(Old) ++
+                                    rafter_voting:to_list(New))));
+followers(Me, #config{oldvstruct=Old}) ->
+    lists:delete(Me, rafter_voting:to_list(Old)).
 
 %% @doc Go right to stable mode if this is the initial configuration.
--spec reconfig(#config{}, list()) -> #config{}.
-reconfig(#config{state=blank}=Config, Servers) ->
-    Config#config{state=stable, oldservers=Servers};
-reconfig(#config{state=stable}=Config, Servers) ->
-    Config#config{state=transitional, newservers=Servers}.
+-spec reconfig(#config{}, #vstruct{}) -> #config{}.
+reconfig(#config{state=blank}=Config, Struct) ->
+    Config#config{state=stable, oldvstruct=Struct};
+reconfig(#config{state=stable}=Config, Struct) ->
+    Config#config{state=transitional, newvstruct=Struct}.
 
 -spec allow_config(#config{}, list()) -> boolean().
 allow_config(#config{state=blank}, _NewServers) ->
     true;
-allow_config(#config{state=stable, oldservers=OldServers}, NewServers)
+allow_config(#config{state=stable, oldvstruct=OldServers}, NewServers)
     when NewServers =/= OldServers ->
+    %% TODO: is inequality well-defined on arbitrary records?
     true;
-allow_config(#config{oldservers=OldServers}, NewServers)
+allow_config(#config{oldvstruct=OldServers}, NewServers)
     when NewServers =:= OldServers ->
     {error, not_modified};
 allow_config(_Config, _NewServers) ->

@@ -187,7 +187,7 @@ follower(#append_entries{term=Term, from=From, prev_log_index=PrevLogIndex,
 %% entry in every log.
 follower({set_config, {Id, NewServers}}, From,
           #state{me=Me, followers=F, config=#config{state=blank}=C}=State) ->
-    case lists:member(Me, NewServers) of
+    case lists:member(Me, rafter_voting:to_list(NewServers)) of
         true ->
             {Followers, Config} = reconfig(Me, F, C, NewServers, State),
             NewState = State#state{config=Config, followers=Followers,
@@ -473,7 +473,7 @@ no_leader_error(Me, Config) ->
             election_in_progress
     end.
 
--spec reconfig(term(), dict(), #config{}, list(), #state{}) -> {dict(), #config{}}.
+-spec reconfig(term(), dict(), #config{}, #vstruct{}, #state{}) -> {dict(), #config{}}.
 reconfig(Me, OldFollowers, Config0, NewServers, State) ->
     Config = rafter_config:reconfig(Config0, NewServers),
     NewFollowers = rafter_config:followers(Me, Config),
@@ -631,9 +631,9 @@ commit_entries(NewCommitIndex, #state{commit_index=CommitIndex,
    end, State, lists:seq(CommitIndex+1, LastIndex)).
 
 -spec stabilize_config(#config{}, #state{}) -> #state{}.
-stabilize_config(#config{state=transitional, newservers=New}=C,
+stabilize_config(#config{state=transitional, newvstruct=New}=C,
     #state{me=Me, term=Term}=S) when S#state.leader =:= S#state.me ->
-        Config = C#config{state=stable, oldservers=New, newservers=[]},
+        Config = C#config{state=stable, oldvstruct=New, newvstruct=undefined},
         Entry = #rafter_entry{type=config, term=Term, cmd=Config},
         State = S#state{config=Config},
         {ok, _Index} = rafter_log:append(Me, [Entry]),

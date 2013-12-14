@@ -50,18 +50,13 @@ quorum(Me, #config{state=transitional, oldvstruct=Old, newvstruct=New}, Response
 %% Responses doesn't contain a local vote which must be true if the local
 %% server is a member of the consensus group. Add 1 to TrueResponses in
 %% this case.
-quorum(Me, Servers, Responses) ->
-    TrueResponses = [R || {Peer, R} <- dict:to_list(Responses), R =:= true,
-                                        lists:member(Peer, Servers)],
-    case lists:member(Me, Servers) of
-        true ->
-            length(TrueResponses) + 1 > length(Servers)/2;
-        false ->
-            %% We are about to commit a new configuration that doesn't contain
-            %% the local leader. We must therefore have responses from a
-            %% majority of the other servers to have a quorum.
-            length(TrueResponses) > length(Servers)/2
-    end.
+quorum(Me, Struct, Responses) ->
+    Servers = rafter_voting:to_list(Struct),
+    YesVoters = [{Peer, yes} || {Peer, R} <- dict:to_list(Responses),
+                                             R =:= true,
+                                             lists:member(Peer, Servers)],
+    VotersDict = dict:store(Me, yes, dict:from_list(YesVoters)),
+    rafter_voting:quorum(Struct, dict:to_list(VotersDict)).
 
 %% @doc list of voters excluding me
 -spec voters(term(), #config{}) -> list().

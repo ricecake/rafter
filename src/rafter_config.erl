@@ -26,16 +26,15 @@ quorum_min(Me, #config{state=transitional,
 %% Responses doesn't contain the local response so it will be marked as 0
 %% when it's a member of the consensus group. In this case we must
 %% skip past it in a sorted list so we add 1 to the quorum offset.
+%% TODO: include "Me"
 quorum_min(_, [], _) ->
     0;
-quorum_min(Me, Servers, Responses) ->
-    Indexes = lists:sort(lists:map(fun(S) -> index(S, Responses) end, Servers)),
-    case lists:member(Me, Servers) of
-        true ->
-            lists:nth(length(Indexes) div 2 + 2, Indexes);
-        false ->
-            lists:nth(length(Indexes) div 2 + 1, Indexes)
-    end.
+quorum_min(_Me, Servers, Responses) ->
+    Indices = unique_sort(
+                lists:map(fun(S) -> index(S, Responses) end,
+                          rafter_voting:to_list(Servers))),
+    [Max|_] = lists:dropwhile(no_quorum(Servers, Responses), Indices),
+    Max.
 
 -spec quorum(term(), #config{} | #vstruct{}, dict()) -> boolean().
 quorum(_Me, #config{state=blank}, _Responses) ->
@@ -124,4 +123,19 @@ index(Peer, Responses) ->
             Index;
         error ->
             0
+    end.
+
+-spec unique_sort(list()) -> list().
+unique_sort(L) ->
+    ordsets:to_list(ordsets:from_list(L)).
+
+-spec no_quorum(#vstruct{}, [non_neg_integer()]) ->
+    fun((non_neg_integer()) -> boolean()).
+no_quorum(Servers, Responses) ->
+    fun(Index) ->
+            Gteq = dict:filter(
+                        fun(_P, I) -> I >= Index end,
+                        Responses),
+            Votes = dict:map(fun(_P, _I) -> yes end, Gteq),
+            not rafter_voting:quorum(Servers, dict:to_list(Votes))
     end.

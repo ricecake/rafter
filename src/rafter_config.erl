@@ -57,7 +57,7 @@ quorum(Me, Struct, Responses) ->
                                              R =:= true,
                                              lists:member(Peer, Servers)],
     VotersDict = dict:store(Me, yes, dict:from_list(YesVoters)),
-    rafter_voting:quorum(Struct, dict:to_list(VotersDict)).
+    rafter_voting:quorum(Struct, VotersDict).
 
 %% @doc list of voters excluding me
 -spec voters(term(), #config{}) -> list().
@@ -138,4 +138,4 @@ has_quorum(Servers, Responses, Index) ->
                 fun(_P, I) -> I >= Index end,
                 Responses),
     Votes = dict:map(fun(_P, _I) -> yes end, Gteq),
-    rafter_voting:quorum(Servers, dict:to_list(Votes)).
+    rafter_voting:quorum(Servers, Votes).

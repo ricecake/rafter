@@ -26,15 +26,14 @@ quorum_min(Me, #config{state=transitional,
 %% Responses doesn't contain the local response so it will be marked as 0
 %% when it's a member of the consensus group. In this case we must
 %% skip past it in a sorted list so we add 1 to the quorum offset.
-%% TODO: include "Me"
 quorum_min(_, [], _) ->
     0;
-quorum_min(_Me, Servers, Responses) ->
+quorum_min(Me, Servers, Responses) ->
     Indices = unique_sort(
                 lists:map(fun(S) -> index(S, Responses) end,
                           rafter_voting:to_list(Servers))),
     Accepted = lists:takewhile(
-                 fun(Index) -> has_quorum(Servers, Responses, Index) end,
+                 fun(Index) -> has_quorum(Me, Servers, Responses, Index) end,
                  Indices),
     lists:last(Accepted).
 
@@ -131,11 +130,14 @@ index(Peer, Responses) ->
 unique_sort(L) ->
     ordsets:to_list(ordsets:from_list(L)).
 
--spec has_quorum(#vstruct{}, dict(), non_neg_integer()) ->
+-spec has_quorum(term(), #vstruct{}, dict(), non_neg_integer()) ->
     boolean().
-has_quorum(Servers, Responses, Index) ->
+has_quorum(Me, Servers, Responses, Index) ->
     Gteq = dict:filter(
                 fun(_P, I) -> I >= Index end,
                 Responses),
     Votes = dict:map(fun(_P, _I) -> yes end, Gteq),
-    rafter_voting:quorum(Servers, Votes).
+    case lists:member(Me, rafter_voting:to_list(Servers)) of
+        true -> rafter_voting:quorum(Servers, dict:append(Me, yes, Votes));
+        false -> rafter_voting:quorum(Servers, Votes)
+    end.

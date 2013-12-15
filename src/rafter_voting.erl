@@ -1,8 +1,8 @@
--module(voting).
+-module(rafter_voting).
 
 -export([quorum/2, merge_vstructs/3, init_vstate/1, vote/3, vote/1, to_list/1]).
 
--include("voting.hrl").
+-include("rafter.hrl").
 
 -spec merge_vstructs(non_neg_integer(), non_neg_integer(), [#vstruct{}]) ->
     #vstruct{}.
@@ -48,13 +48,13 @@ init_vstate_rec(#vstruct_v{votes = V, thresh = T, children = Structs}) ->
     States = lists:map(fun init_vstate_rec/1, Structs),
     #vstate_v{votes = V, thresh = T, children = States}.
 
--spec quorum(#vstruct{}, [{vid(), yes | no}]) -> boolean().
+-spec quorum(#vstruct{}, dict()) -> boolean().
 quorum(Struct, Votes) ->
     State0 = init_vstate(Struct),
-    State1 = lists:foldl(
-               fun({_Vid, _Vote}, yes) -> yes;
-                  ({_Vid, _Vote}, no) -> no;
-                  ({Vid, Vote}, State) ->
+    State1 = dict:fold(
+               fun(_Vid, _Vote, yes) -> yes;
+                  (_Vid, _Vote, no) -> no;
+                  (Vid, Vote, State) ->
                        NewState = vote(State, Vid, Vote),
                        Result = vote(NewState),
                        case Result of pending -> NewState; _ -> Result end
@@ -62,7 +62,7 @@ quorum(Struct, Votes) ->
                State0, Votes),
     case State1 of yes -> true; _ -> false end.
 
--spec vote(#vstate{}, vid(), yes | no) -> #vstate{}.
+-spec vote(#vstate{}, peer(), yes | no) -> #vstate{}.
 vote(#vstate{tree = Tree, indices = Indices}, Vid, Vote) ->
     Paths = orddict:fetch(Vid, Indices),
     NewTree = lists:foldl(
@@ -103,7 +103,7 @@ acc_votes(State = #vstate_v{children = States}) ->
     No = length(lists:filter(Voted(no), States)),
     State#vstate_v{yes_votes = Yes, no_votes = No}.
 
--spec to_list(#vstate{} | #vstruct{}) -> [ vid() ].
+-spec to_list(#vstate{} | #vstruct{}) -> [ peer() ].
 to_list(#vstate{indices = Indices}) ->
     orddict:fetch_keys(Indices);
 to_list(#vstruct{indices = Indices}) ->

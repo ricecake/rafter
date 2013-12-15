@@ -10,18 +10,18 @@
 %% API
 %%====================================================================
 
--spec quorum_min(term(), #config{} | [], dict()) -> non_neg_integer().
+-spec quorum_min(term(), #config{} | #vstruct{}, dict()) -> non_neg_integer().
 quorum_min(_Me, #config{state=blank}, _) ->
     0;
 quorum_min(Me, #config{state=stable, oldvstruct=OldServers}, Responses) ->
-    quorum_min(Me, rafter_voting:to_list(OldServers), Responses);
+    quorum_min(Me, OldServers, Responses);
 quorum_min(Me, #config{state=staging, oldvstruct=OldServers}, Responses) ->
-    quorum_min(Me, rafter_voting:to_list(OldServers), Responses);
+    quorum_min(Me, OldServers, Responses);
 quorum_min(Me, #config{state=transitional,
                    oldvstruct=Old,
                    newvstruct=New}, Responses) ->
-    min(quorum_min(Me, rafter_voting:to_list(Old), Responses),
-        quorum_min(Me, rafter_voting:to_list(New), Responses));
+    min(quorum_min(Me, Old, Responses),
+        quorum_min(Me, New, Responses));
 
 %% Responses doesn't contain the local response so it will be marked as 0
 %% when it's a member of the consensus group. In this case we must

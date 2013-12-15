@@ -133,10 +133,10 @@ unique_sort(L) ->
 -spec has_quorum(term(), #vstruct{}, dict(), non_neg_integer()) ->
     boolean().
 has_quorum(Me, Servers, Responses, Index) ->
-    Gteq = dict:filter(
-                fun(_P, I) -> I >= Index end,
-                Responses),
-    Votes = dict:map(fun(_P, _I) -> yes end, Gteq),
+    Votes = filtermap(
+              fun(_, I) -> I >= Index end,
+              fun(_, _) -> yes end,
+              Responses),
     case lists:member(Me, rafter_voting:to_list(Servers)) of
         true -> rafter_voting:quorum(Servers, dict:append(Me, yes, Votes));
         false -> rafter_voting:quorum(Servers, Votes)

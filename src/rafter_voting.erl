@@ -48,13 +48,13 @@ init_vstate_rec(#vstruct_v{votes = V, thresh = T, children = Structs}) ->
     States = lists:map(fun init_vstate_rec/1, Structs),
     #vstate_v{votes = V, thresh = T, children = States}.
 
--spec quorum(#vstruct{}, [{peer(), yes | no}]) -> boolean().
+-spec quorum(#vstruct{}, dict()) -> boolean().
 quorum(Struct, Votes) ->
     State0 = init_vstate(Struct),
-    State1 = lists:foldl(
-               fun({_Vid, _Vote}, yes) -> yes;
-                  ({_Vid, _Vote}, no) -> no;
-                  ({Vid, Vote}, State) ->
+    State1 = dict:fold(
+               fun(_Vid, _Vote, yes) -> yes;
+                  (_Vid, _Vote, no) -> no;
+                  (Vid, Vote, State) ->
                        NewState = vote(State, Vid, Vote),
                        Result = vote(NewState),
                        case Result of pending -> NewState; _ -> Result end

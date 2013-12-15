@@ -33,10 +33,10 @@ quorum_min(_Me, Servers, Responses) ->
     Indices = unique_sort(
                 lists:map(fun(S) -> index(S, Responses) end,
                           rafter_voting:to_list(Servers))),
-    [Max|_] = lists:dropwhile(
-                fun(Index) -> not has_quorum(Servers, Responses, Index) end,
-                Indices),
-    Max.
+    Accepted = lists:takewhile(
+                 fun(Index) -> has_quorum(Servers, Responses, Index) end,
+                 Indices),
+    lists:last(Accepted).
 
 -spec quorum(term(), #config{} | #vstruct{}, dict()) -> boolean().
 quorum(_Me, #config{state=blank}, _Responses) ->

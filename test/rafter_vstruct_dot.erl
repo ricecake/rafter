@@ -1,8 +1,8 @@
--module(dot).
+-module(rafter_vstruct_dot).
 
 -export([vstruct_dot/1, vstate_dot/1]).
 
--include("voting.hrl").
+-include("rafter.hrl").
 
 -spec vstruct_dot(#vstruct{}) -> ok.
 vstruct_dot(#vstruct{tree = Tree, indices = [{Vid1, _}|Indices]}) ->

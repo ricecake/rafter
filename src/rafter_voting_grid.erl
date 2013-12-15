@@ -1,24 +1,24 @@
--module(grid).
+-module(rafter_voting_grid).
 
 -export([grid/1]).
 
--include("voting.hrl").
+-include("rafter.hrl").
 -type grid_spec() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}.
 
--spec grid([vid()]) -> #vstruct{}.
+-spec grid([peer()]) -> #vstruct{}.
 grid(Ids) ->
     GridSpec = makeGrid(length(Ids), true),
     rafter_voting:merge_vstructs(1, 2, [columnCovers(Ids, GridSpec),
                                         completeColumnCovers(Ids, GridSpec)]).
 
--spec columnCovers([vid()], grid_spec()) -> #vstruct{}.
+-spec columnCovers([peer()], grid_spec()) -> #vstruct{}.
 columnCovers(Ids, {Rows, Cols, D}) ->
     Covers = lists:map(
                fun(Col) -> columnCover(Ids, Col, {Rows, Cols, D}) end,
                lists:seq(1, Cols)),
     rafter_voting:merge_vstructs(1, Cols, Covers).
 
--spec completeColumnCovers([vid()], grid_spec()) -> #vstruct{}.
+-spec completeColumnCovers([peer()], grid_spec()) -> #vstruct{}.
 completeColumnCovers(Ids, {Rows, Cols, D}) ->
     Covers = lists:map(
                fun(Col) -> completeColumnCover(Ids, Col, {Rows, Cols, D}) end,
@@ -26,7 +26,7 @@ completeColumnCovers(Ids, {Rows, Cols, D}) ->
     rafter_voting:merge_vstructs(1, 1, Covers).
 
 
--spec completeColumnCover([vid()], non_neg_integer(), grid_spec()) ->
+-spec completeColumnCover([peer()], non_neg_integer(), grid_spec()) ->
     #vstruct{}.
 completeColumnCover(Ids, Col, {_Rows, Cols, _D}) ->
     RowsIds = chunk(Cols, Ids),
@@ -46,7 +46,7 @@ completeColumnCover(Ids, Col, {_Rows, Cols, _D}) ->
     #vstruct{tree = #vstruct_v{thresh = length(Phys), children = Phys},
              indices = orddict:from_list(Indices)}.
 
--spec columnCover([vid()], non_neg_integer(), grid_spec()) -> #vstruct{}.
+-spec columnCover([peer()], non_neg_integer(), grid_spec()) -> #vstruct{}.
 columnCover(Ids, Col, GridSpec) ->
     #vstruct{tree = T, indices = I} = completeColumnCover(Ids, Col, GridSpec),
     #vstruct{tree = T#vstruct_v{thresh = 1}, indices = I}.

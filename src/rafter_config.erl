@@ -52,11 +52,11 @@ quorum(Me, #config{state=transitional, oldvstruct=Old, newvstruct=New}, Response
 %% this case.
 quorum(Me, Struct, Responses) ->
     Servers = rafter_voting:to_list(Struct),
-    YesVoters = [{Peer, yes} || {Peer, R} <- dict:to_list(Responses),
-                                             R =:= true,
-                                             lists:member(Peer, Servers)],
-    VotersDict = dict:store(Me, yes, dict:from_list(YesVoters)),
-    rafter_voting:quorum(Struct, VotersDict).
+    Votes = filtermap(
+              fun(Peer, R) -> R andalso lists:member(Peer, Servers) end,
+              fun(_, _) -> yes end,
+              dict:append(Me, yes, Responses)),
+    rafter_voting:quorum(Struct, Votes).
 
 %% @doc list of voters excluding me
 -spec voters(term(), #config{}) -> list().
@@ -141,3 +141,10 @@ has_quorum(Me, Servers, Responses, Index) ->
         true -> rafter_voting:quorum(Servers, dict:append(Me, yes, Votes));
         false -> rafter_voting:quorum(Servers, Votes)
     end.
+
+-spec filtermap(fun((term(), term()) -> boolean()),
+                fun((term(), term()) -> term()),
+                dict())
+    -> dict().
+filtermap(P, F, Dict) ->
+    dict:map(F, dict:filter(P, Dict)).

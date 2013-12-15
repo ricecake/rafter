@@ -33,7 +33,9 @@ quorum_min(_Me, Servers, Responses) ->
     Indices = unique_sort(
                 lists:map(fun(S) -> index(S, Responses) end,
                           rafter_voting:to_list(Servers))),
-    [Max|_] = lists:dropwhile(no_quorum(Servers, Responses), Indices),
+    [Max|_] = lists:dropwhile(
+                fun(Index) -> not has_quorum(Servers, Responses, Index) end,
+                Indices),
     Max.
 
 -spec quorum(term(), #config{} | #vstruct{}, dict()) -> boolean().
@@ -129,13 +131,11 @@ index(Peer, Responses) ->
 unique_sort(L) ->
     ordsets:to_list(ordsets:from_list(L)).
 
--spec no_quorum(#vstruct{}, [non_neg_integer()]) ->
-    fun((non_neg_integer()) -> boolean()).
-no_quorum(Servers, Responses) ->
-    fun(Index) ->
-            Gteq = dict:filter(
-                        fun(_P, I) -> I >= Index end,
-                        Responses),
-            Votes = dict:map(fun(_P, _I) -> yes end, Gteq),
-            not rafter_voting:quorum(Servers, dict:to_list(Votes))
-    end.
+-spec has_quorum(#vstruct{}, dict(), non_neg_integer()) ->
+    boolean().
+has_quorum(Servers, Responses, Index) ->
+    Gteq = dict:filter(
+                fun(_P, I) -> I >= Index end,
+                Responses),
+    Votes = dict:map(fun(_P, _I) -> yes end, Gteq),
+    rafter_voting:quorum(Servers, dict:to_list(Votes)).

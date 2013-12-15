@@ -8,22 +8,22 @@
 -spec grid([vid()]) -> #vstruct{}.
 grid(Ids) ->
     GridSpec = makeGrid(length(Ids), true),
-    voting:merge_vstructs(1, 2, [columnCovers(Ids, GridSpec),
-                                 completeColumnCovers(Ids, GridSpec)]).
+    rafter_voting:merge_vstructs(1, 2, [columnCovers(Ids, GridSpec),
+                                        completeColumnCovers(Ids, GridSpec)]).
 
 -spec columnCovers([vid()], grid_spec()) -> #vstruct{}.
 columnCovers(Ids, {Rows, Cols, D}) ->
     Covers = lists:map(
                fun(Col) -> columnCover(Ids, Col, {Rows, Cols, D}) end,
                lists:seq(1, Cols)),
-    voting:merge_vstructs(1, Cols, Covers).
+    rafter_voting:merge_vstructs(1, Cols, Covers).
 
 -spec completeColumnCovers([vid()], grid_spec()) -> #vstruct{}.
 completeColumnCovers(Ids, {Rows, Cols, D}) ->
     Covers = lists:map(
                fun(Col) -> completeColumnCover(Ids, Col, {Rows, Cols, D}) end,
                lists:seq(1, Cols)),
-    voting:merge_vstructs(1, 1, Covers).
+    rafter_voting:merge_vstructs(1, 1, Covers).
 
 
 -spec completeColumnCover([vid()], non_neg_integer(), grid_spec()) ->

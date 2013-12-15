@@ -35,7 +35,7 @@ quorum_min(Me, Servers, Responses) ->
     Accepted = lists:takewhile(
                  fun(Index) -> has_quorum(Me, Servers, Responses, Index) end,
                  Indices),
-    lists:last(Accepted).
+    case Accepted of [] -> 0; _ -> lists:last(Accepted) end.
 
 -spec quorum(term(), #config{} | #vstruct{}, dict()) -> boolean().
 quorum(_Me, #config{state=blank}, _Responses) ->
@@ -53,7 +53,8 @@ quorum(Me, #config{state=transitional, oldvstruct=Old, newvstruct=New}, Response
 quorum(Me, Struct, Responses) ->
     Servers = rafter_voting:to_list(Struct),
     Votes = filtermap(
-              fun(Peer, R) -> R andalso lists:member(Peer, Servers) end,
+              fun(Peer, R) -> R =:= true andalso
+                              lists:member(Peer, Servers) end,
               fun(_, _) -> yes end,
               dict:append(Me, true, Responses)),
     rafter_voting:quorum(Struct, Votes).

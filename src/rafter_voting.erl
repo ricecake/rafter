@@ -19,13 +19,13 @@ merge_vstructs(Votes, Thresh, Structs0) ->
     #vstruct{tree = Root, indices = Indices}.
 
 -spec combine_indices([index()], [index()]) -> [index()].
-combine_indices(I1, I2) ->
+combine_indices(IndicesA, IndicesB) ->
     orddict:fold(
-      fun(Id, Paths, Indices) ->
-              lists:foldl(fun(Path, Indices1) ->
-                                  orddict:append(Id, Path, Indices1)
-                          end, Indices, Paths)
-      end, I1, I2).
+      fun(Id, Paths, AccIndices) ->
+              lists:foldl(fun(Path, Indices) ->
+                                  orddict:append(Id, Path, Indices)
+                          end, AccIndices, Paths)
+      end, IndicesA, IndicesB).
 
 -spec prepend_paths(non_neg_integer(), #vstruct{}) ->
     {#vstruct_p{} | #vstruct_v{}, [ index() ]}.

@@ -66,9 +66,7 @@ quorum(Struct, Votes) ->
 vote(#vstate{tree = Tree, indices = Indices}, Vid, Vote) ->
     Paths = orddict:fetch(Vid, Indices),
     NewTree = lists:foldl(
-                fun(Path, State) ->
-                        vote_rec(State, Path, Vote)
-                end,
+                fun(Path, State) -> vote_rec(State, Path, Vote) end,
                 Tree, Paths),
     #vstate{tree = NewTree, indices = orddict:erase(Vid, Indices)}.
 

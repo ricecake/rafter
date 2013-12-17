@@ -6,16 +6,16 @@
 
 -spec merge_vstructs(non_neg_integer(), non_neg_integer(), [#vstruct{}]) ->
     #vstruct{}.
-merge_vstructs(Votes, Thresh, Structs) ->
-    {Children, {_, Indices}} = lists:mapfoldl(
-                                 fun(Struct, {I, AllIndices}) ->
-                                         {Child, Indices} = prepend_paths(
-                                                              I, Struct),
+merge_vstructs(Votes, Thresh, Structs0) ->
+    {Structs1, {_, Indices}} = lists:mapfoldl(
+                                 fun(Struct0, {I, AccIndices}) ->
+                                         {Struct1, Indices} = prepend_paths(
+                                                                I, Struct0),
                                          NewIndices = combine_indices(
-                                                        AllIndices, Indices),
-                                         {Child, {I + 1, NewIndices}}
-                                 end, {0, orddict:new()}, Structs),
-    Root = #vstruct_v{votes = Votes, thresh = Thresh, children = Children},
+                                                        AccIndices, Indices),
+                                         {Struct1, {I + 1, NewIndices}}
+                                 end, {0, orddict:new()}, Structs0),
+    Root = #vstruct_v{votes = Votes, thresh = Thresh, children = Structs1},
     #vstruct{tree = Root, indices = Indices}.
 
 -spec combine_indices([ index() ], [ index() ]) -> [ index() ].

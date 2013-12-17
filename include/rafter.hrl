@@ -8,13 +8,13 @@
 -type vote() :: pending | yes | no.
 
 -record(vstruct_p, {
-          votes = 1 :: non_neg_integer(),
+          votes = 1 :: pos_integer(),
           id :: peer()
 }).
 
 -record(vstruct_v, {
-          votes = 1 :: non_neg_integer(),
-          thresh :: non_neg_integer(),
+          votes = 1 :: pos_integer(),
+          thresh :: pos_integer(),
           children :: [ #vstruct_v{} | #vstruct_p{} ]
 }).
 
@@ -24,15 +24,15 @@
 }).
 
 -record(vstate_p, {
-          votes = 1 :: non_neg_integer(),
+          votes = 1 :: pos_integer(),
           vote = pending :: vote()
 }).
 
 -record(vstate_v, {
-          votes = 1 :: non_neg_integer(),
+          votes = 1 :: pos_integer(),
           yes_votes = 0 :: non_neg_integer(),
           no_votes = 0 :: non_neg_integer(),
-          thresh :: non_neg_integer(),
+          thresh :: pos_integer(),
           children :: [ #vstate_v{} | #vstate_p{} ]
 }).
 

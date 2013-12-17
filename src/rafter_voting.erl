@@ -4,7 +4,7 @@
 
 -include("rafter.hrl").
 
--spec merge_vstructs(non_neg_integer(), non_neg_integer(), [#vstruct{}]) ->
+-spec merge_vstructs(pos_integer(), pos_integer(), [#vstruct{}]) ->
     #vstruct{}.
 merge_vstructs(Votes, Thresh, Structs0) ->
     {Structs1, {_, Indices}} = lists:mapfoldl(

@@ -3,7 +3,7 @@
 -export([grid/1]).
 
 -include("rafter.hrl").
--type grid_spec() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}.
+-type grid_spec() :: {pos_integer(), pos_integer(), non_neg_integer()}.
 
 -spec grid([peer()]) -> #vstruct{}.
 grid(Ids) ->
@@ -51,7 +51,7 @@ columnCover(Ids, Col, GridSpec) ->
     #vstruct{tree = T, indices = I} = completeColumnCover(Ids, Col, GridSpec),
     #vstruct{tree = T#vstruct_v{thresh = 1}, indices = I}.
 
--spec makeGrid(non_neg_integer(), boolean()) -> grid_spec().
+-spec makeGrid(pos_integer(), boolean()) -> grid_spec().
 makeGrid(N, FavoringRows) ->
     {Rows, Cols} = makeGridFavoringRows(N),
     D = Rows * Cols - N,
@@ -59,8 +59,8 @@ makeGrid(N, FavoringRows) ->
        true -> {Cols, Rows, D}
     end.
 
--spec makeGridFavoringRows(non_neg_integer()) ->
-    {non_neg_integer(), non_neg_integer()}.
+-spec makeGridFavoringRows(pos_integer()) ->
+    {pos_integer(), pos_integer()}.
 makeGridFavoringRows(N) when N < 3 ->
     {N, 1};
 makeGridFavoringRows(N) ->

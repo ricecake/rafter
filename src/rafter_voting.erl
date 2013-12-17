@@ -18,7 +18,7 @@ merge_vstructs(Votes, Thresh, Structs0) ->
     Root = #vstruct_v{votes = Votes, thresh = Thresh, children = Structs1},
     #vstruct{tree = Root, indices = Indices}.
 
--spec combine_indices([ index() ], [ index() ]) -> [ index() ].
+-spec combine_indices([index()], [index()]) -> [index()].
 combine_indices(I1, I2) ->
     orddict:fold(
       fun(Id, Paths, Indices) ->

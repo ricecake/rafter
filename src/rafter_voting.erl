@@ -28,13 +28,13 @@ combine_indices(IndicesA, IndicesB) ->
       end, IndicesA, IndicesB).
 
 -spec prepend_paths(non_neg_integer(), #vstruct{}) ->
-    {#vstruct_p{} | #vstruct_v{}, [ index() ]}.
-prepend_paths(Index, #vstruct{tree = T, indices = I}) ->
-    NewI = orddict:map(
-             fun(_, Paths) ->
-                     lists:map(fun(Path) -> [Index|Path] end, Paths)
-             end, I),
-    {T, NewI}.
+    {#vstruct_p{} | #vstruct_v{}, [index()]}.
+prepend_paths(Index, #vstruct{tree = Tree, indices = Indices}) ->
+    NewIndices = orddict:map(
+                   fun(_, Paths) ->
+                           lists:map(fun(Path) -> [Index|Path] end, Paths)
+                   end, Indices),
+    {Tree, NewIndices}.
 
 -spec init_vstate(#vstruct{}) -> #vstate{}.
 init_vstate(#vstruct{tree = Tree, indices = Indices}) ->
@@ -103,7 +103,7 @@ acc_votes(State = #vstate_v{children = States}) ->
     No = length(lists:filter(Voted(no), States)),
     State#vstate_v{yes_votes = Yes, no_votes = No}.
 
--spec to_list(#vstate{} | #vstruct{}) -> [ peer() ].
+-spec to_list(#vstate{} | #vstruct{}) -> [peer()].
 to_list(#vstate{indices = Indices}) ->
     orddict:fetch_keys(Indices);
 to_list(#vstruct{indices = Indices}) ->

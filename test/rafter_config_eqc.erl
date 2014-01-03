@@ -233,6 +233,9 @@ vstruct(Peers) ->
     {Mod, Fun} = vsgen(),
     apply(Mod, Fun, [Peers]).
 
+vstruct() ->
+    vstruct(servers()).
+
 servers() ->
     ?SUCHTHAT(Servers, oneof([three_servers(), five_servers(), seven_servers()]),
        begin

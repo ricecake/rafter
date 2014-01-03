@@ -63,12 +63,18 @@ quorum(Struct, Votes) ->
     case State1 of yes -> true; _ -> false end.
 
 -spec vote(#vstate{}, peer(), yes | no) -> #vstate{}.
-vote(#vstate{tree = Tree, indices = Indices}, Vid, Vote) ->
-    Paths = orddict:fetch(Vid, Indices),
-    NewTree = lists:foldl(
-                fun(Path, State) -> vote_rec(State, Path, Vote) end,
-                Tree, Paths),
-    #vstate{tree = NewTree, indices = orddict:erase(Vid, Indices)}.
+vote(S = #vstate{tree = Tree, indices = Indices}, Vid, Vote) ->
+    try orddict:fetch(Vid, Indices) of
+        Paths ->
+            NewTree = lists:foldl(
+                        fun(Path, State) -> vote_rec(State, Path, Vote) end,
+                        Tree, Paths),
+            #vstate{tree = NewTree, indices = orddict:erase(Vid, Indices)}
+    catch
+        error:function_clause ->
+            %% node identifier not found in indices list
+            S
+    end.
 
 -spec vote(#vstate{} | #vstate_v{} | #vstate_p{}) -> vote().
 vote(#vstate_v{yes_votes = Yes, thresh = T})

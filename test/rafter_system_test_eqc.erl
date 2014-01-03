@@ -23,8 +23,8 @@
 -record(model_state, {to :: atom(),
                       running :: #vstruct{},
                       state=init :: init | blank | transitional | stable,
-                      oldservers :: #vstruct{},
-                      newservers :: #vstruct{},
+                      oldvstruct :: #vstruct{},
+                      newvstruct :: #vstruct{},
                       commit_index=0 :: non_neg_integer(),
                       last_committed_op :: term(),
                       leader :: atom()}).
@@ -147,7 +147,7 @@ next_state(#model_state{state=init}=S, _,
 %% The initial config is always just the running servers
 next_state(#model_state{state=blank, to=To, running=Running}=S,
     _Result, {call, rafter, set_config, [To, Running]}) ->
-        S#model_state{commit_index=1, state=stable, oldservers=Running};
+        S#model_state{commit_index=1, state=stable, oldvstruct=Running};
 
 next_state(#model_state{state=stable, commit_index=CI, leader=Leader,
   last_committed_op=LastOp}=S, Result, {call, rafter, op, [_, Op]}) ->
@@ -175,9 +175,9 @@ postcondition(#model_state{state=blank},
   {call, rafter, set_config, [_To, _Servers]}, {ok, _}) ->
     true;
 
-postcondition(#model_state{state=stable, oldservers=Servers, to=To},
+postcondition(#model_state{state=stable, oldvstruct=Servers, to=To},
   {call, rafter, op, [To, _]}, {ok, _}) ->
-    true =:= lists:member(To, Servers);
+    true =:= lists:member(To, rafter_voting:to_list(Servers));
 postcondition(#model_state{state=stable, to=To}, {call, rafter, op, [To, _]},
     {error, {redirect, Leader}}) ->
         Leader =/= To;

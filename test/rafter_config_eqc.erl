@@ -229,8 +229,8 @@ vsgen() ->
            {rafter_voting_grid, grid}]).
 
 vstruct(Peers) ->
-    {Mod, Fun} = vsgen(),
-    apply(Mod, Fun, [Peers]).
+    ?LET({Mod, Fun}, vsgen(),
+         apply(Mod, Fun, [Peers])).
 
 vstruct() ->
     vstruct(servers()).

@@ -225,6 +225,14 @@ response(Me) ->
 server() ->
     oneof([a,b,c,d,e,f,g,h,i]).
 
+vsgen() ->
+    oneof([{rafter_voting_majority, majority},
+           {rafter_voting_grid, grid}]).
+
+vstruct(Peers) ->
+    {Mod, Fun} = vsgen(),
+    apply(Mod, Fun, [Peers]).
+
 servers() ->
     ?SUCHTHAT(Servers, oneof([three_servers(), five_servers(), seven_servers()]),
        begin

@@ -5,7 +5,8 @@
 -include("rafter.hrl").
 
 -spec vstruct_dot(#vstruct{}) -> ok.
-vstruct_dot(#vstruct{tree = Tree, indices = [{Vid1, _}|Indices]}) ->
+%% vstruct_dot(#vstruct{tree = Tree, indices = [{Vid1, _}|Indices]}) ->
+vstruct_dot(#vstruct{tree = Tree}) ->
     io:fwrite("digraph vstruct {~n"),
     io:fwrite("node [shape=Mrecord];~n"),
     %% io:format("indices [label=\"<~p>~p", [Vid1, Vid1]),

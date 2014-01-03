@@ -17,12 +17,12 @@
 
 -compile(export_all).
 
--record(state, {running = [] :: list(peer()),
+-record(state, {running :: #vstruct{},
 
                 %% #config{} in an easier to match form
                 state=blank :: blank | transitional | stable,
-                oldservers=[] :: list(peer()),
-                newservers=[] :: list(peer()),
+                oldvstruct :: #vstruct{},
+                newvstruct :: #vstruct{},
 
                 %% The peer we are communicating with during tests
                 to :: peer()}).
@@ -92,7 +92,8 @@ prop_config() ->
                 {H, S, Res} = run_commands(?MODULE, Cmds),
                 eqc_statem:pretty_commands(?MODULE, Cmds, {H, S, Res},
                     begin
-                        [rafter:stop_node(P) || P <- S#state.running],
+                        RunningList = rafter_voting:to_list(S#state.running),
+                        [rafter:stop_node(P) || P <- RunningList],
                         os:cmd(["rm ", ?logdir, "/*.meta"]),
                         os:cmd(["rm ", ?logdir, "/*.log"]),
                         Res =:= ok
@@ -105,37 +106,35 @@ prop_config() ->
 %% ====================================================================
 
 initial_state() ->
-    #state{running=[a, b, c, d, e],
+    #state{running=vstruct([a, b, c, d, e]),
            state=blank,
-           oldservers=[],
-           newservers=[],
            to=a}.
 
 command(#state{to=To}) ->
     oneof([{call, rafter, set_config, [To, servers()]}]).
 
 precondition(#state{running=Running}, {call, rafter, set_config, [Peer, _]}) ->
-    lists:member(Peer, Running).
+    lists:member(Peer, rafter_voting:to_list(Running)).
 
 next_state(#state{state=blank}=S,
            _Result, {call, rafter, set_config, [To, Peers]}) ->
-    case lists:member(To, Peers) of
+    case lists:member(To, rafter_voting:to_list(Peers)) of
         true ->
-            S#state{state=stable, oldservers=Peers};
+            S#state{state=stable, oldvstruct=Peers};
         false ->
             S
     end;
 
-next_state(#state{state=stable, oldservers=Old, running=Running}=S,
+next_state(#state{state=stable, oldvstruct=Old, running=Running}=S,
             _Result, {call, rafter, set_config, [To, Peers]}) ->
-    case lists:member(To, Old) of
+    case lists:member(To, rafter_voting:to_list(Old)) of
         true ->
-            Config = #config{state=transitional, oldservers=Old, newservers=Peers},
-            case majority_not_running(To, Config, Running) of
+            Config = #config{state=transitional, oldvstruct=Old, newvstruct=Peers},
+            case quorum_impossible(To, Config, Running) of
                 true ->
-                    S#state{state=transitional, newservers=Peers};
+                    S#state{state=transitional, newvstruct=Peers};
                 false ->
-                    S#state{state=stable, oldservers=Peers, newservers=[]}
+                    S#state{state=stable, oldvstruct=Peers, newvstruct=undefined}
             end;
         false ->
             %% We can't update config since we already configured ourself
@@ -156,24 +155,24 @@ postcondition(_S, {call, rafter, set_config, _args}, {ok, _newconfig}) ->
 
 postcondition(#state{running=Running, state=blank},
               {call, rafter, set_config, [Peer, NewServers]}, {error, peers_not_responding}) ->
-    Config=#config{state=stable, oldservers=NewServers},
-    majority_not_running(Peer, Config, Running);
+    Config=#config{state=stable, oldvstruct=NewServers},
+    quorum_impossible(Peer, Config, Running);
 
-postcondition(#state{running=Running, oldservers=Old, newservers=New, state=State},
+postcondition(#state{running=Running, oldvstruct=Old, newvstruct=New, state=State},
         {call, rafter, set_config, [Peer, _]}, {error, election_in_progress}) ->
-    Config=#config{state=State, oldservers=Old, newservers=New},
-    majority_not_running(Peer, Config, Running);
+    Config=#config{state=State, oldvstruct=Old, newvstruct=New},
+    quorum_impossible(Peer, Config, Running);
 
-postcondition(#state{running=Running, oldservers=Old, state=stable},
+postcondition(#state{running=Running, oldvstruct=Old, state=stable},
              {call, rafter, set_config, [Peer, NewServers]}, {error, timeout}) ->
     %% This is the state that the server should have set from this call should
     %% have set before running the reconfig
-    C=#config{state=transitional, oldservers=Old, newservers=NewServers},
-    majority_not_running(Peer, C, Running);
+    C=#config{state=transitional, oldvstruct=Old, newvstruct=NewServers},
+    quorum_impossible(Peer, C, Running);
 
-postcondition(#state{oldservers=Old, newservers=New, state=State},
+postcondition(#state{oldvstruct=Old, newvstruct=New, state=State},
              {call, rafter, set_config, [Peer, _]}, {error, not_consensus_group_member}) ->
-    C=#config{state=State, oldservers=Old, newservers=New},
+    C=#config{state=State, oldvstruct=Old, newvstruct=New},
     false =:= rafter_config:has_vote(Peer, C);
 
 postcondition(#state{state=State}, {call, rafter, set_config, [_, _]},
@@ -183,9 +182,9 @@ postcondition(#state{state=State}, {call, rafter, set_config, [_, _]},
 postcondition(#state{running=Running, state=blank},
         {call, rafter, set_config, [Peer, _]}, {error, invalid_initial_config}) ->
     C = #config{state=blank},
-    majority_not_running(Peer, C, Running);
+    quorum_impossible(Peer, C, Running);
 
-postcondition(#state{oldservers=Old},
+postcondition(#state{oldvstruct=Old},
               {call, rafter, set_config, [_Peer, NewServers]}, {error, not_modified}) ->
     Old =:= NewServers.
 
@@ -205,8 +204,8 @@ map_to_true(QuorumMin, Values) ->
                     {Key, false}
               end, Values).
 
-majority_not_running(Peer, Config, Running) ->
-    Dict = quorum_dict(Peer, Running),
+quorum_impossible(Peer, Config, Running) ->
+    Dict = quorum_dict(Peer, rafter_voting:to_list(Running)),
     not rafter_config:quorum(Peer, Config, Dict).
 
 %% ====================================================================
@@ -258,22 +257,19 @@ config() ->
 
 stable_config() ->
     #config{state=stable,
-            oldservers=servers(),
-            newservers=[]}.
+            oldvstruct=vstruct()}.
 
 blank_config() ->
-    #config{state=blank,
-            oldservers=[],
-            newservers=[]}.
+    #config{state=blank}.
 
 staging_config() ->
     #config{state=staging,
-            oldservers=servers(),
-            newservers=servers()}.
+            oldvstruct=vstruct(),
+            newvstruct=vstruct()}.
 
 transitional_config() ->
     #config{state=transitional,
-            oldservers=servers(),
-            newservers=servers()}.
+            oldvstruct=vstruct(),
+            newvstruct=vstruct()}.
 
 -endif.

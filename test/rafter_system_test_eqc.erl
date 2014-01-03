@@ -109,7 +109,7 @@ initial_state() ->
     #model_state{}.
 
 command(#model_state{state=init}) ->
-    {call, ?MODULE, start_nodes, [servers()]};
+    {call, ?MODULE, start_nodes, [vstruct()]};
 
 command(#model_state{state=blank, to=To, running=Running}) ->
     {call, rafter, set_config, [To, Running]};
@@ -262,6 +262,9 @@ vsgen() ->
 vstruct(Peers) ->
     {Mod, Fun} = vsgen(),
     apply(Mod, Fun, [Peers]).
+
+vstruct() ->
+    vstruct(servers()).
 
 servers() ->
     ?SUCHTHAT(Servers, oneof([three_servers(), five_servers(), seven_servers()]),

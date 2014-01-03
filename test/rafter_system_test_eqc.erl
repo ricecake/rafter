@@ -23,8 +23,8 @@
 -record(model_state, {to :: atom(),
                       running=[] :: list(atom()),
                       state=init :: init | blank | transitional | stable,
-                      oldservers=[] :: list(atom()),
-                      newservers=[] :: list(atom()),
+                      oldservers :: #vstruct{},
+                      newservers :: #vstruct{},
                       commit_index=0 :: non_neg_integer(),
                       last_committed_op :: term(),
                       leader :: atom()}).

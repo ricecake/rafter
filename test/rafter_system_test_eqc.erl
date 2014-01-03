@@ -114,16 +114,19 @@ command(#model_state{state=init}) ->
 command(#model_state{state=blank, to=To, running=Running}) ->
     {call, rafter, set_config, [To, Running]};
 
-%% TODO: Generalise this to arbitrary voting structures
-command(#model_state{state=stable, oldservers=Old, running=Running})
-  when length(Running) =< (length(Old) div 2) ->
-    NodeToStart = oneof(lists:subtract(Old, Running)),
-    {call, rafter, start_node, [NodeToStart]};
-
-command(#model_state{state=stable, to=To, running=Running}) ->
+command(#model_state{state=stable, to=To, running=Running, oldvstruct=Old}) ->
     RunningList = rafter_voting:to_list(Running),
-    frequency([{100, {call, rafter, op, [To, command()]}},
-               {1, {call, rafter, stop_node, [oneof(RunningList)]}}]).
+    YesVotes = dict:from_list([{S, yes} || S <- RunningList]),
+    case rafter_voting:quorum(Old, YesVotes) of
+        false ->
+            OldList = rafter_voting:to_list(Old),
+            NodeToStart = oneof(lists:subtract(OldList, RunningList)),
+            {call, rafter, start_node, [NodeToStart]};
+        true ->
+            RunningList = rafter_voting:to_list(Running),
+            frequency([{100, {call, rafter, op, [To, command()]}},
+                    {1, {call, rafter, stop_node, [oneof(RunningList)]}}])
+    end.
 
 precondition(#model_state{state=init}, _) ->
     true;

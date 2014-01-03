@@ -88,8 +88,10 @@ start_node(Peer) ->
     Opts = #rafter_opts{logdir=?logdir},
     rafter:start_node(Peer, Opts).
 
-start_nodes(Peers) ->
-    [start_node(P) || P <- Peers].
+start_nodes(Servers) when is_list(Servers) ->
+    [start_node(S) || S <- Servers];
+start_nodes(Vstruct) ->
+    [start_node(S) || S <- rafter_voting:to_list(Vstruct)].
 
 %% ====================================================================
 %% EQC Properties

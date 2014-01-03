@@ -90,9 +90,7 @@ start_node(Peer) ->
     rafter:start_node(Peer, Opts).
 
 start_nodes(Servers) when is_list(Servers) ->
-    [start_node(S) || S <- Servers];
-start_nodes(Vstruct) ->
-    [start_node(S) || S <- rafter_voting:to_list(Vstruct)].
+    [start_node(S) || S <- Servers].
 
 %% ====================================================================
 %% EQC Properties
@@ -109,7 +107,7 @@ initial_state() ->
     #model_state{}.
 
 command(#model_state{state=init}) ->
-    {call, ?MODULE, start_nodes, [vstruct()]};
+    {call, ?MODULE, start_nodes, [servers()]};
 
 command(#model_state{state=blank, to=To, running=Running}) ->
     {call, rafter, set_config, [To, Running]};
@@ -123,7 +121,6 @@ command(#model_state{state=stable, to=To, running=Running, oldvstruct=Old}) ->
             NodeToStart = oneof(lists:subtract(OldList, RunningList)),
             {call, rafter, start_node, [NodeToStart]};
         true ->
-            RunningList = rafter_voting:to_list(Running),
             frequency([{100, {call, rafter, op, [To, command()]}},
                     {1, {call, rafter, stop_node, [oneof(RunningList)]}}])
     end.
@@ -143,8 +140,9 @@ precondition(#model_state{running=Running}, {call, rafter, set_config, [To, _]})
     lists:member(To, RunningList).
 
 next_state(#model_state{state=init}=S, _,
-    {call, ?MODULE, start_nodes, [Running]}) ->
-        Leader = lists:nth(1, rafter_voting:to_list(Running)),
+    {call, ?MODULE, start_nodes, [RunningList]}) ->
+        Leader = lists:nth(1, RunningList),
+        Running = vstruct(RunningList),
         S#model_state{state=blank, running=Running, to=Leader, leader=Leader};
 
 %% The initial config is always just the running servers

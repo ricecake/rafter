@@ -1,6 +1,7 @@
 -module(rafter_voting).
 
--export([quorum/2, merge_vstructs/3, init_vstate/1, vote/3, vote/1, to_list/1]).
+-export([quorum/2, merge_vstructs/3, init_vstate/1, vote/3, vote/1,
+         to_list/1, member/2]).
 
 -include("rafter.hrl").
 
@@ -56,8 +57,10 @@ quorum(Struct, Votes) ->
                   (_Vid, _Vote, no) -> no;
                   (Vid, Vote, State) ->
                        NewState = vote(State, Vid, Vote),
-                       Result = vote(NewState),
-                       case Result of pending -> NewState; _ -> Result end
+                       case vote(NewState) of
+                           pending -> NewState;
+                           Result -> Result
+                       end
                end,
                State0, Votes),
     case State1 of yes -> true; _ -> false end.
@@ -107,9 +110,7 @@ acc_votes(State = #vstate_v{children = States}) ->
     No = length(lists:filter(Voted(no), States)),
     State#vstate_v{yes_votes = Yes, no_votes = No}.
 
--spec to_list(#vstate{} | #vstruct{} | undefined) -> [peer()].
-to_list(undefined) ->
-    [];
+-spec to_list(#vstate{} | #vstruct{}) -> [peer()].
 to_list(#vstate{indices = Indices}) ->
     try orddict:fetch_keys(Indices) of
         Ids -> Ids
@@ -122,3 +123,7 @@ to_list(#vstruct{indices = Indices}) ->
     catch
         error:function_clause -> []
     end.
+
+-spec member(peer(), #vstate{} | #vstruct{}) -> boolean().
+member(I, S) ->
+    lists:member(I, to_list(S)).

@@ -21,7 +21,7 @@
 -compile(export_all).
 
 -record(model_state, {to :: atom(),
-                      running=[] :: list(atom()),
+                      running :: #vstruct{},
                       state=init :: init | blank | transitional | stable,
                       oldservers :: #vstruct{},
                       newservers :: #vstruct{},
@@ -79,7 +79,8 @@ run_print_cleanup(Cmds) ->
         cleanup_test(S, Res)).
 
 cleanup_test(S, Res) ->
-    [rafter:stop_node(P) || P <- S#model_state.running],
+    Peers = rafter_voting:to_list(S#model_state.running),
+    [rafter:stop_node(P) || P <- Peers],
     os:cmd(["rm -rf ", ?logdir]),
     os:cmd(["mkdir ", ?logdir]),
     ok =:= Res.
@@ -113,29 +114,34 @@ command(#model_state{state=init}) ->
 command(#model_state{state=blank, to=To, running=Running}) ->
     {call, rafter, set_config, [To, Running]};
 
+%% TODO: Generalise this to arbitrary voting structures
 command(#model_state{state=stable, oldservers=Old, running=Running})
   when length(Running) =< (length(Old) div 2) ->
     NodeToStart = oneof(lists:subtract(Old, Running)),
     {call, rafter, start_node, [NodeToStart]};
 
 command(#model_state{state=stable, to=To, running=Running}) ->
+    RunningList = rafter_voting:to_list(Running),
     frequency([{100, {call, rafter, op, [To, command()]}},
-               {1, {call, rafter, stop_node, [oneof(Running)]}}]).
+               {1, {call, rafter, stop_node, [oneof(RunningList)]}}]).
 
 precondition(#model_state{state=init}, _) ->
     true;
-precondition(#model_state{running=[]}, {call, rafter, _, _}) ->
+precondition(#model_state{running=undefined}, {call, rafter, _, _}) ->
     false;
 precondition(#model_state{running=Running}, {call, rafter, _, [To]}) ->
-    lists:member(To, Running);
+    RunningList = rafter_voting:to_list(Running),
+    lists:member(To, RunningList);
 precondition(#model_state{running=Running}, {call, rafter, op, [To, _]}) ->
-    lists:member(To, Running);
+    RunningList = rafter_voting:to_list(Running),
+    lists:member(To, RunningList);
 precondition(#model_state{running=Running}, {call, rafter, set_config, [To, _]}) ->
-    lists:member(To, Running).
+    RunningList = rafter_voting:to_list(Running),
+    lists:member(To, RunningList).
 
 next_state(#model_state{state=init}=S, _,
     {call, ?MODULE, start_nodes, [Running]}) ->
-        Leader = lists:nth(1, Running),
+        Leader = lists:nth(1, rafter_voting:to_list(Running)),
         S#model_state{state=blank, running=Running, to=Leader, leader=Leader};
 
 %% The initial config is always just the running servers
@@ -151,12 +157,13 @@ next_state(#model_state{state=stable, commit_index=CI, leader=Leader,
 
 next_state(#model_state{state=stable, to=To, running=Running}=S,
     _Result, {call, rafter, stop_node, [Node]}) ->
-        NewRunning = lists:delete(Node, Running),
+        NewRunningList = lists:delete(Node, rafter_voting:to_list(Running)),
+        NewRunning = vstruct(NewRunningList),
         case To of
             Node ->
                 S#model_state{leader=unknown,
                               running=NewRunning,
-                              to=lists:nth(1, NewRunning)};
+                              to=lists:nth(1, NewRunningList)};
             _ ->
                 S#model_state{running=NewRunning}
         end.
@@ -244,6 +251,14 @@ command() ->
 
 server() ->
     oneof([a,b,c,d,e,f,g,h,i]).
+
+vsgen() ->
+    oneof([{rafter_voting_majority, majority},
+           {rafter_voting_grid, grid}]).
+
+vstruct(Peers) ->
+    {Mod, Fun} = vsgen(),
+    apply(Mod, Fun, [Peers]).
 
 servers() ->
     ?SUCHTHAT(Servers, oneof([three_servers(), five_servers(), seven_servers()]),

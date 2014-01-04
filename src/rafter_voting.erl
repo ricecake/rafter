@@ -110,7 +110,7 @@ acc_votes(State = #vstate_v{children = States}) ->
     No = length(lists:filter(Voted(no), States)),
     State#vstate_v{yes_votes = Yes, no_votes = No}.
 
--spec to_list(#vstate{} | #vstruct{}) -> [peer()].
+-spec to_list(#vstate{} | #vstruct{} | undefined) -> [peer()].
 to_list(#vstate{indices = Indices}) ->
     try orddict:fetch_keys(Indices) of
         Ids -> Ids
@@ -122,7 +122,9 @@ to_list(#vstruct{indices = Indices}) ->
         Ids -> Ids
     catch
         error:function_clause -> []
-    end.
+    end;
+to_list(undefined) ->
+    [].
 
 -spec member(peer(), #vstate{} | #vstruct{}) -> boolean().
 member(I, S) ->

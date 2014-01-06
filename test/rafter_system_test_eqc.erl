@@ -256,26 +256,16 @@ vsgen() ->
            {rafter_voting_grid, grid}]).
 
 vstruct(Peers) ->
-    ?LET({Mod, Fun}, vsgen(),
-         apply(Mod, Fun, [Peers])).
+    ?LET({Mod, Fun}, vsgen(), apply(Mod, Fun, [Peers])).
 
 vstruct() ->
-    vstruct(servers()).
+    ?LET(Servers, servers(), vstruct(Servers)).
 
 servers() ->
-    ?SUCHTHAT(Servers, oneof([three_servers(), five_servers(), seven_servers()]),
-       begin
-            Uniques = sets:to_list(sets:from_list(Servers)),
-            length(Uniques) =:= length(Servers)
-       end).
+    ?LET(Seq, sequence(),
+         shuffle([list_to_atom(integer_to_list(I)) || I <- Seq])).
 
-three_servers() ->
-    vector(3, server()).
-
-five_servers() ->
-    vector(5, server()).
-
-seven_servers() ->
-    vector(7, server()).
+sequence() ->
+    ?SIZED(Size, lists:seq(0, Size + 3)).
 
 -endif.

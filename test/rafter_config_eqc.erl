@@ -112,7 +112,7 @@ initial_state() ->
            to=a}.
 
 command(#state{to=To}) ->
-    oneof([{call, rafter, set_config, [To, servers()]}]).
+    {call, rafter, set_config, [To, vstruct()]}.
 
 precondition(#state{running=Running}, {call, rafter, set_config, [Peer, _]}) ->
     lists:member(Peer, rafter_voting:to_list(Running)).

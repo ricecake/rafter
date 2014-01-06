@@ -139,9 +139,8 @@ precondition(#model_state{running=Running}, {call, rafter, set_config, [To, _]})
     rafter_voting:member(To, Running).
 
 next_state(#model_state{state=init}=S, _,
-    {call, ?MODULE, start_nodes, [RunningList]}) ->
-        Leader = lists:nth(1, RunningList),
-        Running = vstruct(RunningList),
+    {call, ?MODULE, start_nodes, [Running]}) ->
+        Leader = lists:nth(1, rafter_voting:to_list(Running)),
         S#model_state{state=blank, running=Running, to=Leader, leader=Leader};
 
 %% The initial config is always just the running servers

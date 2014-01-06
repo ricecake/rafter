@@ -92,8 +92,9 @@ prop_config() ->
                 {H, S, Res} = run_commands(?MODULE, Cmds),
                 eqc_statem:pretty_commands(?MODULE, Cmds, {H, S, Res},
                     begin
-                        RunningList = rafter_voting:to_list(S#state.running),
-                        [rafter:stop_node(P) || P <- RunningList],
+                        %% TODO: Does Running still contain all the running
+                        %% nodes at this point?
+                        [rafter:stop_node(P) || P <- Running],
                         os:cmd(["rm ", ?logdir, "/*.meta"]),
                         os:cmd(["rm ", ?logdir, "/*.log"]),
                         Res =:= ok

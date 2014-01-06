@@ -90,7 +90,9 @@ start_node(Peer) ->
     rafter:start_node(Peer, Opts).
 
 start_nodes(Servers) when is_list(Servers) ->
-    [start_node(S) || S <- Servers].
+    [start_node(S) || S <- Servers];
+start_nodes(Servers) ->
+    [start_node(S) || S <- rafter_voting:to_list(Servers)].
 
 %% ====================================================================
 %% EQC Properties

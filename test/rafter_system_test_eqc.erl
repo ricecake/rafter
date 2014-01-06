@@ -132,14 +132,11 @@ precondition(#model_state{state=init}, _) ->
 precondition(#model_state{running=undefined}, {call, rafter, _, _}) ->
     false;
 precondition(#model_state{running=Running}, {call, rafter, _, [To]}) ->
-    RunningList = rafter_voting:to_list(Running),
-    lists:member(To, RunningList);
+    rafter_voting:member(To, Running);
 precondition(#model_state{running=Running}, {call, rafter, op, [To, _]}) ->
-    RunningList = rafter_voting:to_list(Running),
-    lists:member(To, RunningList);
+    rafter_voting:member(To, Running);
 precondition(#model_state{running=Running}, {call, rafter, set_config, [To, _]}) ->
-    RunningList = rafter_voting:to_list(Running),
-    lists:member(To, RunningList).
+    rafter_voting:member(To, Running).
 
 next_state(#model_state{state=init}=S, _,
     {call, ?MODULE, start_nodes, [RunningList]}) ->
@@ -180,7 +177,7 @@ postcondition(#model_state{state=blank},
 
 postcondition(#model_state{state=stable, oldvstruct=Servers, to=To},
   {call, rafter, op, [To, _]}, {ok, _}) ->
-    true =:= lists:member(To, rafter_voting:to_list(Servers));
+    true =:= rafter_voting:member(To, Servers);
 postcondition(#model_state{state=stable, to=To}, {call, rafter, op, [To, _]},
     {error, {redirect, Leader}}) ->
         Leader =/= To;

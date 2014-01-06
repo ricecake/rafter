@@ -109,7 +109,7 @@ initial_state() ->
     #model_state{}.
 
 command(#model_state{state=init}) ->
-    {call, ?MODULE, start_nodes, [servers()]};
+    {call, ?MODULE, start_nodes, [vstruct()]};
 
 command(#model_state{state=blank, to=To, running=Running}) ->
     {call, rafter, set_config, [To, Running]};

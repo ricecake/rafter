@@ -114,8 +114,11 @@ initial_state() ->
 command(#state{to=To}) ->
     {call, rafter, set_config, [To, vstruct()]}.
 
-precondition(#state{running=Running}, {call, rafter, set_config, [Peer, _]}) ->
-    lists:member(Peer, rafter_voting:to_list(Running)).
+%% FIXME: This is a dirty hack. This precondition really should be tested.
+%% precondition(#state{running=Running}, {call, rafter, set_config, [Peer, _]}) ->
+%%     rafter_voting:member(Peer, Running).
+precondition(_, _) ->
+    true.
 
 next_state(#state{state=blank}=S,
            _Result, {call, rafter, set_config, [To, Peers]}) ->

@@ -122,7 +122,7 @@ precondition(_, _) ->
 
 next_state(#state{state=blank}=S,
            _Result, {call, rafter, set_config, [To, Peers]}) ->
-    case lists:member(To, rafter_voting:to_list(Peers)) of
+    case rafter_voting:member(To, Peers) of
         true ->
             S#state{state=stable, oldvstruct=Peers};
         false ->
@@ -131,7 +131,7 @@ next_state(#state{state=blank}=S,
 
 next_state(#state{state=stable, oldvstruct=Old, running=Running}=S,
             _Result, {call, rafter, set_config, [To, Peers]}) ->
-    case lists:member(To, rafter_voting:to_list(Old)) of
+    case rafter_voting:member(To, Old) of
         true ->
             Config = #config{state=transitional, oldvstruct=Old, newvstruct=Peers},
             case quorum_impossible(To, Config, Running) of

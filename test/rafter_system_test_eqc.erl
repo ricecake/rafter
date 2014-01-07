@@ -270,7 +270,7 @@ vstruct_spec() ->
     ?LET({Servers, Gen}, {servers(), vsgen()}, {Servers, Gen}).
 
 servers() ->
-    ?LET(Seq, ?SIZED(Size, lists:seq(0, Size + 3)),
+    ?LET(Seq, ?SIZED(Size, resize(0.5, lists:seq(0, Size + 2))),
          shuffle([list_to_atom(integer_to_list(I)) || I <- Seq])).
 
 -endif.

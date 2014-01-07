@@ -248,9 +248,6 @@ committed_entry_exists_in_log(#model_state{commit_index=CI,
 command() ->
     oneof(["inc key val", "get key", "set key val", "keyspace", "config"]).
 
-server() ->
-    oneof([a,b,c,d,e,f,g,h,i]).
-
 vsgen() ->
     oneof([{rafter_voting_majority, majority},
            {rafter_voting_grid, grid}]).

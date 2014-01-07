@@ -36,7 +36,7 @@
     eqc:on_output(fun(Str, Args) ->
                 io:format(user, Str, Args) end, P)).
 
--define(logdir, "./rafter_logs").
+-define(logdir, "/tmp/rafter_logs").
 
 %% ====================================================================
 %% Tests

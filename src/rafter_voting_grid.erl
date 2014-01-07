@@ -44,7 +44,7 @@ completeColumnCover(Ids, Col, {_Rows, Cols, _D}) ->
     {Indices, _} = lists:mapfoldl(fun(Id, K) -> {{Id, [[K]]}, K+1} end,
                                   0, ColIds),
     #vstruct{tree = #vstruct_v{thresh = length(Phys), children = Phys},
-             indices = orddict:from_list(Indices)}.
+             indices = dict:from_list(Indices)}.
 
 -spec columnCover([peer()], non_neg_integer(), grid_spec()) -> #vstruct{}.
 columnCover(Ids, Col, GridSpec) ->

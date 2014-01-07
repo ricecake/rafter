@@ -3,8 +3,6 @@
 %% Voting structure types & records
 -type path() :: [ non_neg_integer() ].
 
--type index() :: { peer(), [ path() ] }.
-
 -type vote() :: pending | yes | no.
 
 -record(vstruct_p, {
@@ -20,7 +18,7 @@
 
 -record(vstruct, {
           tree :: #vstruct_v{},
-          indices :: [ index() ]
+          indices :: dict()
 }).
 
 -record(vstate_p, {
@@ -38,7 +36,7 @@
 
 -record(vstate, {
           tree :: #vstate_v{},
-          indices :: [ index() ]
+          indices :: dict()
 }).
 
 %% Transport Independent MESSAGES

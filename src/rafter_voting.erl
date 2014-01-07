@@ -15,23 +15,23 @@ merge_vstructs(Votes, Thresh, Structs0) ->
                                          NewIndices = combine_indices(
                                                         AccIndices, Indices),
                                          {Struct1, {I + 1, NewIndices}}
-                                 end, {0, orddict:new()}, Structs0),
+                                 end, {0, dict:new()}, Structs0),
     Root = #vstruct_v{votes = Votes, thresh = Thresh, children = Structs1},
     #vstruct{tree = Root, indices = Indices}.
 
--spec combine_indices([index()], [index()]) -> [index()].
+-spec combine_indices(dict(), dict()) -> dict().
 combine_indices(IndicesA, IndicesB) ->
-    orddict:fold(
+    dict:fold(
       fun(Id, Paths, AccIndices) ->
               lists:foldl(fun(Path, Indices) ->
-                                  orddict:append(Id, Path, Indices)
+                                  dict:append(Id, Path, Indices)
                           end, AccIndices, Paths)
       end, IndicesA, IndicesB).
 
 -spec prepend_paths(non_neg_integer(), #vstruct{}) ->
-    {#vstruct_p{} | #vstruct_v{}, [index()]}.
+    {#vstruct_p{} | #vstruct_v{}, dict()}.
 prepend_paths(Index, #vstruct{tree = Tree, indices = Indices}) ->
-    NewIndices = orddict:map(
+    NewIndices = dict:map(
                    fun(_, Paths) ->
                            lists:map(fun(Path) -> [Index|Path] end, Paths)
                    end, Indices),
@@ -67,14 +67,14 @@ quorum(Struct, Votes) ->
 
 -spec vote(#vstate{}, peer(), yes | no) -> #vstate{}.
 vote(S = #vstate{tree = Tree, indices = Indices}, Vid, Vote) ->
-    try orddict:fetch(Vid, Indices) of
+    try dict:fetch(Vid, Indices) of
         Paths ->
             NewTree = lists:foldl(
                         fun(Path, State) -> vote_rec(State, Path, Vote) end,
                         Tree, Paths),
-            #vstate{tree = NewTree, indices = orddict:erase(Vid, Indices)}
+            #vstate{tree = NewTree, indices = dict:erase(Vid, Indices)}
     catch
-        error:function_clause ->
+        error:badarg ->
             %% node identifier not found in indices list
             S
     end.
@@ -112,13 +112,13 @@ acc_votes(State = #vstate_v{children = States}) ->
 
 -spec to_list(#vstate{} | #vstruct{} | undefined) -> [peer()].
 to_list(#vstate{indices = Indices}) ->
-    try orddict:fetch_keys(Indices) of
+    try dict:fetch_keys(Indices) of
         Ids -> Ids
     catch
         error:function_clause -> []
     end;
 to_list(#vstruct{indices = Indices}) ->
-    try orddict:fetch_keys(Indices) of
+    try dict:fetch_keys(Indices) of
         Ids -> Ids
     catch
         error:function_clause -> []

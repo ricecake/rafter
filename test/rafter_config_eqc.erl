@@ -240,11 +240,8 @@ vstruct() ->
     ?LET(Servers, servers(), vstruct(Servers)).
 
 servers() ->
-    ?LET(Seq, sequence(),
+    ?LET(Seq, ?SIZED(Size, resize(0.5, lists:seq(0, Size + 2))),
          shuffle([list_to_atom(integer_to_list(I)) || I <- Seq])).
-
-sequence() ->
-    ?SIZED(Size, lists:seq(0, Size + 3)).
 
 config() ->
     oneof([stable_config(), blank_config(),

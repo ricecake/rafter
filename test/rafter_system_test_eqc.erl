@@ -260,12 +260,6 @@ vsgen() ->
     oneof([{rafter_voting_majority, majority},
            {rafter_voting_grid, grid}]).
 
-vstruct(Peers) ->
-    ?LET({Mod, Fun}, vsgen(), apply(Mod, Fun, [Peers])).
-
-vstruct() ->
-    ?LET(Servers, servers(), vstruct(Servers)).
-
 vstruct_spec() ->
     ?LET({Servers, Gen}, {servers(), vsgen()}, {Servers, Gen}).
 

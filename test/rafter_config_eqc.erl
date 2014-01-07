@@ -27,6 +27,8 @@
                 %% The peer we are communicating with during tests
                 to :: peer()}).
 
+-define(MAX_RUNNING, 40).
+
 -define(logdir, "./rafter_logs").
 
 -define(QC_OUT(P),
@@ -87,13 +89,13 @@ prop_config() ->
     ?FORALL(Cmds, commands(?MODULE),
         aggregate(command_names(Cmds),
             begin
-                Running = [a, b, c, d, e],
+                Running = [a |
+                           [list_to_atom(integer_to_list(I)) ||
+                            I <- lists:seq(0, ?MAX_RUNNING)]],
                 [rafter:start_node(P, Opts) || P <- Running],
                 {H, S, Res} = run_commands(?MODULE, Cmds),
                 eqc_statem:pretty_commands(?MODULE, Cmds, {H, S, Res},
                     begin
-                        %% TODO: Does Running still contain all the running
-                        %% nodes at this point?
                         [rafter:stop_node(P) || P <- Running],
                         os:cmd(["rm ", ?logdir, "/*.meta"]),
                         os:cmd(["rm ", ?logdir, "/*.log"]),
@@ -107,17 +109,13 @@ prop_config() ->
 %% ====================================================================
 
 initial_state() ->
-    #state{running=vstruct([a, b, c, d, e]),
+    #state{running=vstruct(a),
            state=blank,
            to=a}.
 
 command(#state{to=To}) ->
     {call, rafter, set_config, [To, vstruct()]}.
 
-%% TODO: Does this have the desired result?
-precondition(#state{running={Running, _}},
-    {call, rafter, set_config, [Peer, _]}) when is_list(Running) ->
-        lists:member(Peer, Running);
 precondition(_, _) ->
     true.
 
@@ -227,21 +225,24 @@ response(Me) ->
               Me =/= Server).
 
 server() ->
-    oneof([a,b,c,d,e,f,g,h,i]).
+    ?LET(Servers, servers(), oneof(Servers)).
 
 vsgen() ->
     oneof([{rafter_voting_majority, majority},
            {rafter_voting_grid, grid}]).
 
-vstruct(Peers) ->
-    ?LET({Mod, Fun}, vsgen(), apply(Mod, Fun, [Peers])).
+vstruct(Peers) when is_list(Peers) ->
+    ?LET({Mod, Fun}, vsgen(), apply(Mod, Fun, [Peers]));
+vstruct(Peer) ->
+    ?LET(Servers, servers(),
+         vstruct(shuffle([Peer|Servers]))).
 
 vstruct() ->
     ?LET(Servers, servers(), vstruct(Servers)).
 
 servers() ->
-    ?LET(Seq, ?SIZED(Size, resize(0.5, lists:seq(0, Size + 2))),
-         shuffle([list_to_atom(integer_to_list(I)) || I <- Seq])).
+    ?LET(N, choose(3, ?MAX_RUNNING),
+         shuffle([list_to_atom(integer_to_list(I)) || I <- lists:seq(0, N)])).
 
 config() ->
     oneof([stable_config(), blank_config(),

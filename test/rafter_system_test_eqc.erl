@@ -49,7 +49,7 @@ eqc_test_() ->
        fun setup/0,
        fun cleanup/1,
        [%% Run the quickcheck tests
-        {timeout, 120,
+        {timeout, 300,
          ?_assertEqual(true,
              eqc:quickcheck(
                  ?QC_OUT(eqc:numtests(50, prop_rafter()))))}

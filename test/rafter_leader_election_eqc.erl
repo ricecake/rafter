@@ -47,7 +47,7 @@ cleanup(_) ->
 prop_leader_elected() ->
     rafter:start_cluster(),
     assert_each_node_is_follower_with_blank_config(),
-    rafter:set_config(peer1, peers()),
+    rafter:set_config(peer1, rafter_gen:vstruct(peers())),
     %% leader election should occur in less than 1 second with the defaults. 
     %% This is a liveness constraint I'd like to maintain if possible.
     timer:sleep(1000),

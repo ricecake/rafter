@@ -256,12 +256,8 @@ committed_entry_exists_in_log(#model_state{commit_index=CI,
 command() ->
     oneof(["inc key val", "get key", "set key val", "keyspace", "config"]).
 
-vsgen() ->
-    oneof([{rafter_voting_majority, majority},
-           {rafter_voting_grid, grid}]).
-
 vstruct_spec() ->
-    ?LET({Servers, Gen}, {servers(), vsgen()}, {Servers, Gen}).
+    ?LET({Servers, Gen}, {servers(), rafter_gen:vsgen()}, {Servers, Gen}).
 
 servers() ->
     ?LET(Seq, ?SIZED(Size, resize(0.5, lists:seq(0, Size + 2))),

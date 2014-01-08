@@ -27,8 +27,6 @@
                 %% The peer we are communicating with during tests
                 to :: peer()}).
 
--define(MAX_RUNNING, 40).
-
 -define(logdir, "./rafter_logs").
 
 -define(QC_OUT(P),
@@ -91,7 +89,7 @@ prop_config() ->
             begin
                 Running = [a |
                            [list_to_atom(integer_to_list(I)) ||
-                            I <- lists:seq(0, ?MAX_RUNNING)]],
+                            I <- lists:seq(0, rafter_gen:max_running())]],
                 [rafter:start_node(P, Opts) || P <- Running],
                 {H, S, Res} = run_commands(?MODULE, Cmds),
                 eqc_statem:pretty_commands(?MODULE, Cmds, {H, S, Res},
@@ -109,12 +107,12 @@ prop_config() ->
 %% ====================================================================
 
 initial_state() ->
-    #state{running=vstruct(a),
+    #state{running=rafter_gen:vstruct(a),
            state=blank,
            to=a}.
 
 command(#state{to=To}) ->
-    {call, rafter, set_config, [To, vstruct()]}.
+    {call, rafter, set_config, [To, rafter_gen:vstruct()]}.
 
 precondition(_, _) ->
     true.
@@ -216,33 +214,13 @@ quorum_impossible(Peer, Config, Running) ->
 %% ====================================================================
 
 responses() ->
-    Me = server(),
+    Me = rafter_gen:server(),
     {Me, list(response(Me))}.
 
 response(Me) ->
     ?SUCHTHAT({Server, _Index},
-              {server(), rafter_gen:non_neg_integer()},
+              {rafter_gen:server(), rafter_gen:non_neg_integer()},
               Me =/= Server).
-
-server() ->
-    ?LET(Servers, servers(), oneof(Servers)).
-
-vsgen() ->
-    oneof([{rafter_voting_majority, majority},
-           {rafter_voting_grid, grid}]).
-
-vstruct(Peers) when is_list(Peers) ->
-    ?LET({Mod, Fun}, vsgen(), apply(Mod, Fun, [Peers]));
-vstruct(Peer) ->
-    ?LET(Servers, servers(),
-         vstruct(shuffle([Peer|Servers]))).
-
-vstruct() ->
-    ?LET(Servers, servers(), vstruct(Servers)).
-
-servers() ->
-    ?LET(N, choose(3, ?MAX_RUNNING),
-         shuffle([list_to_atom(integer_to_list(I)) || I <- lists:seq(0, N)])).
 
 config() ->
     oneof([stable_config(), blank_config(),
@@ -250,19 +228,19 @@ config() ->
 
 stable_config() ->
     #config{state=stable,
-            oldvstruct=vstruct()}.
+            oldvstruct=rafter_gen:vstruct()}.
 
 blank_config() ->
     #config{state=blank}.
 
 staging_config() ->
     #config{state=staging,
-            oldvstruct=vstruct(),
-            newvstruct=vstruct()}.
+            oldvstruct=rafter_gen:vstruct(),
+            newvstruct=rafter_gen:vstruct()}.
 
 transitional_config() ->
     #config{state=transitional,
-            oldvstruct=vstruct(),
-            newvstruct=vstruct()}.
+            oldvstruct=rafter_gen:vstruct(),
+            newvstruct=rafter_gen:vstruct()}.
 
 -endif.

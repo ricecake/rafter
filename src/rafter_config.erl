@@ -135,12 +135,9 @@ has_quorum(Me, Servers, Responses, Index) ->
               fun(_, I) -> I >= Index end,
               fun(_, _) -> yes end,
               Responses),
-    case {lists:member(Me, rafter_voting:to_list(Servers)),
-          dict:is_key(Me, Votes)} of
-        {true, false} ->
-            rafter_voting:quorum(Servers, dict:append(Me, yes, Votes));
-        _ ->
-            rafter_voting:quorum(Servers, Votes)
+    case lists:member(Me, rafter_voting:to_list(Servers)) of
+        true -> rafter_voting:quorum(Servers, dict:append(Me, yes, Votes));
+        false -> rafter_voting:quorum(Servers, Votes)
     end.
 
 -spec filtermap(fun((term(), term()) -> boolean()),

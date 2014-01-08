@@ -109,8 +109,10 @@ prop_majority() ->
         begin
             All = [Leader|Servers],
             Maj = rafter_voting_majority:majority(All),
-            M1 = rafter_config_majority:quorum_max(Leader, All, Responses),
-            M2 = rafter_config:quorum_max(Leader, Maj, Responses),
+            M1 = {rafter_config_majority:quorum_max(Leader, All, Responses),
+                  rafter_config_majority:quorum(Leader, All, Responses)},
+            M2 = {rafter_config:quorum_max(Leader, Maj, Responses),
+                  rafter_config:quorum(Leader, Maj, Responses)},
             M1 == M2
         end).
 

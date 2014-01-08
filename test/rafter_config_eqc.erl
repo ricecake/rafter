@@ -50,7 +50,9 @@ eqc_test_() ->
                              [{prop_quorum_max,
                                      prop_quorum_max()},
                               {prop_config,
-                                  prop_config()}])))))}
+                                  prop_config()},
+                              {prop_majority,
+                                  prop_majority()}])))))}
        ]
       }
      ]
@@ -100,6 +102,17 @@ prop_config() ->
                         Res =:= ok
                     end)
             end)).
+
+prop_majority() ->
+    ?FORALL(
+        {[Leader|Servers], Responses}, {rafter_gen:servers(), responses()},
+        begin
+            All = [Leader|Servers],
+            Maj = rafter_voting_majority:majority(All),
+            M1 = rafter_config_majority:quorum_max(Leader, All, Responses),
+            M2 = rafter_config:quorum_max(Leader, Maj, Responses),
+            M1 == M2
+        end).
 
 
 %% ====================================================================

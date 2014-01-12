@@ -61,7 +61,7 @@ makeGrid(N, FavoringRows) ->
 
 -spec makeGridFavoringRows(pos_integer()) ->
     {pos_integer(), pos_integer()}.
-makeGridFavoringRows(N) when N < 3 ->
+makeGridFavoringRows(N) when N < 4 ->
     {N, 1};
 makeGridFavoringRows(N) ->
     Sqrt = math:sqrt(N),

@@ -187,7 +187,7 @@ follower(#append_entries{term=Term, from=From, prev_log_index=PrevLogIndex,
 %% entry in every log.
 follower({set_config, {Id, NewServers}}, From,
           #state{me=Me, followers=F, config=#config{state=blank}=C}=State) ->
-    case lists:member(Me, rafter_voting:to_list(NewServers)) of
+    case rafter_voting:member(Me, NewServers) of
         true ->
             {Followers, Config} = reconfig(Me, F, C, NewServers, State),
             NewState = State#state{config=Config, followers=Followers,

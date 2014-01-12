@@ -53,7 +53,7 @@ quorum(Me, Struct, Responses) ->
               fun(Peer, R) -> R =:= true andalso
                               lists:member(Peer, Servers) end,
               fun(_, _) -> yes end,
-              dict:append(Me, true, Responses)),
+              dict:store(Me, true, Responses)),
     rafter_voting:quorum(Struct, Votes).
 
 %% @doc list of voters excluding me

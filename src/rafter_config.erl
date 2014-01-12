@@ -73,10 +73,9 @@ voters(#config{oldvstruct=Old}) ->
 has_vote(_Me, #config{state=blank}) ->
     false;
 has_vote(Me, #config{state=transitional, oldvstruct=Old, newvstruct=New})->
-    lists:member(Me, rafter_voting:to_list(Old)) orelse
-    lists:member(Me, rafter_voting:to_list(New));
+    rafter_voting:member(Me, Old) orelse rafter_voting:member(Me, New);
 has_vote(Me, #config{oldvstruct=Old}) ->
-    lists:member(Me, rafter_voting:to_list(Old)).
+    rafter_voting:member(Me, Old).
 
 %% @doc All followers. In staging, some followers are not voters.
 -spec followers(peer(), #config{}) -> list().
@@ -135,7 +134,7 @@ has_quorum(Me, Servers, Responses, Index) ->
               fun(_, I) -> I >= Index end,
               fun(_, _) -> yes end,
               Responses),
-    case lists:member(Me, rafter_voting:to_list(Servers)) of
+    case rafter_voting:member(Me, Servers) of
         true -> rafter_voting:quorum(Servers, dict:store(Me, yes, Votes));
         false -> rafter_voting:quorum(Servers, Votes)
     end.

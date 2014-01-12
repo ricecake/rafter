@@ -105,14 +105,17 @@ prop_config() ->
 
 prop_majority() ->
     ?FORALL(
-        {[Leader|Servers], Responses}, {rafter_gen:servers(), responses()},
+        {Me, Responses}, responses(),
         begin
-            All = [Leader|Servers],
-            Maj = rafter_voting_majority:majority(All),
-            M1 = {rafter_config_majority:quorum_max(Leader, All, Responses),
-                  rafter_config_majority:quorum(Leader, All, Responses)},
-            M2 = {rafter_config:quorum_max(Leader, Maj, Responses),
-                  rafter_config:quorum(Leader, Maj, Responses)},
+            %% FIXME: This dict:erase should not be necessary by how
+            %% responses() is defined!
+            ResponseDict = dict:erase(Me, dict:from_list(Responses)),
+            Servers = dict:fetch_keys(ResponseDict),
+            Maj = rafter_voting_majority:majority(Servers),
+            M1 = {rafter_config_majority:quorum_max(Me, Servers, ResponseDict),
+                  rafter_config_majority:quorum(Me, Servers, ResponseDict)},
+            M2 = {rafter_config:quorum_max(Me, Maj, ResponseDict),
+                  rafter_config:quorum(Me, Maj, ResponseDict)},
             M1 == M2
         end).
 

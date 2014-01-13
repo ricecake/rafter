@@ -39,7 +39,7 @@ vstate_dot(#vstate{tree = Tree}) ->
 
 -spec vstate_dot_rec([non_neg_integer()], #vstate_p{} | #vstate_v{}) -> ok.
 vstate_dot_rec(Path, #vstate_p{vote = Vote}) ->
-    C = case Vote of yes -> "green"; no -> "red"; pending -> "black" end,
+    C = case Vote of true -> "green"; false -> "red"; pending -> "black" end,
     io:format("\"~p\" [label=\"p\", color=~s];~n", [Path, C]);
 vstate_dot_rec(Path, #vstate_v{votes = V, yes_votes = YesVotes,
                                no_votes = NoVotes, thresh = T,

@@ -24,7 +24,7 @@ prop_majority_quorum() ->
 
 has_quorum(Nodes, YesVotes) ->
     Struct = rafter_voting_majority:majority(Nodes),
-    Votes = dict:from_list([{Node, yes} || Node <- YesVotes]),
+    Votes = dict:from_list([{Node, true} || Node <- YesVotes]),
     rafter_voting:quorum(Struct, Votes).
 
 -endif.

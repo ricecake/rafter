@@ -117,7 +117,7 @@ command(#model_state{state=blank, to=To, running={Running, Gen}}) ->
 
 command(#model_state{state=stable, to=To,
                      running={Running, _}, oldvstruct={Old, Gen}}) ->
-    YesVotes = dict:from_list([{S, yes} || S <- Running]),
+    YesVotes = dict:from_list([{S, true} || S <- Running]),
     case rafter_voting:quorum(gen_vstruct(Old, Gen), YesVotes) of
         false ->
             NodeToStart = oneof(lists:subtract(Old, Running)),

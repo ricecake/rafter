@@ -46,8 +46,10 @@ init_vstate(#vstruct{tree = Tree, indices = Indices}) ->
 init_vstate_rec(#vstruct_p{votes = V}) ->
     #vstate_p{votes = V};
 init_vstate_rec(#vstruct_v{votes = V, thresh = T, children = Structs}) ->
-    States = lists:map(fun init_vstate_rec/1, Structs),
-    #vstate_v{votes = V, thresh = T, children = States}.
+    StatesList = lists:map(fun init_vstate_rec/1, Structs),
+    States = array:fix(array:from_list(StatesList)),
+    #vstate_v{votes = V, thresh = T,
+              children = States, num_children = length(Structs)}.
 
 -spec quorum(#vstruct{}, dict()) -> boolean().
 quorum(Struct, Votes) ->
@@ -80,51 +82,45 @@ vote(S = #vstate{tree = Tree, indices = Indices}, Vid, Vote) ->
     end.
 
 -spec vote(#vstate{} | #vstate_v{} | #vstate_p{}) -> vote().
+vote(#vstate_p{vote = V}) ->
+    V;
 vote(#vstate_v{yes_votes = Yes, thresh = T})
   when Yes >= T ->
     true;
-vote(#vstate_v{thresh = T, no_votes = No, children = States})
-  when No > length(States) - T ->
+vote(#vstate_v{thresh = T, no_votes = No, num_children = N})
+  when No > N - T ->
     false;
 vote(#vstate_v{}) ->
     pending;
 vote(#vstate{tree = T}) ->
-    vote(T);
-vote(#vstate_p{vote = V}) ->
-    V.
+    vote(T).
 
 -spec vote_rec(#vstate_v{} | #vstate_p{}, path(), boolean()) ->
     #vstate_v{} | #vstate_p{}.
 vote_rec(State = #vstate_v{children = States}, [Index|Path], Vote) ->
-    {States1, [SubState|States2]} = lists:split(Index, States),
-    NewSubState= vote_rec(SubState, Path, Vote),
-    NewState = State#vstate_v{children = States1 ++ [NewSubState|States2]},
-    acc_votes(NewState);
+    SubState= vote_rec(array:get(Index, States), Path, Vote),
+    NewStates = array:set(Index, SubState, States),
+    acc_votes(State#vstate_v{children = NewStates});
 vote_rec(State = #vstate_p{vote = pending}, [], Vote) ->
     State#vstate_p{vote = Vote}.
 
 -spec acc_votes(#vstate_v{}) -> #vstate_v{}.
 acc_votes(State = #vstate_v{children = States}) ->
-    Voted = fun(Vote) -> fun(S) -> vote(S) =:= Vote end end,
-    Yes = length(lists:filter(Voted(true), States)),
-    No = length(lists:filter(Voted(false), States)),
+    {Yes, No} = array:foldl(
+                  fun(_, S, {Yes, No}) ->
+                          case vote(S) of
+                              true -> {Yes + 1, No};
+                              false -> {Yes, No + 1};
+                              _ -> {Yes, No}
+                          end
+                  end, {0, 0}, States),
     State#vstate_v{yes_votes = Yes, no_votes = No}.
 
 -spec to_list(#vstate{} | #vstruct{} | undefined) -> [peer()].
 to_list(#vstate{indices = Indices}) ->
-    try dict:fetch_keys(Indices) of
-        Ids -> Ids
-    catch
-        error:function_clause -> []
-    end;
+    dict:fetch_keys(Indices);
 to_list(#vstruct{indices = Indices}) ->
-    try dict:fetch_keys(Indices) of
-        Ids -> Ids
-    catch
-        error:function_clause -> []
-    end;
-to_list(undefined) ->
-    [].
+    dict:fetch_keys(Indices).
 
 -spec member(peer(), #vstate{} | #vstruct{}) -> boolean().
 member(I, S) ->

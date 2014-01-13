@@ -31,7 +31,8 @@
           yes_votes = 0 :: non_neg_integer(),
           no_votes = 0 :: non_neg_integer(),
           thresh :: pos_integer(),
-          children :: [ #vstate_v{} | #vstate_p{} ]
+          children :: array(),
+          num_children :: pos_integer()
 }).
 
 -record(vstate, {

@@ -3,7 +3,7 @@
 %% Voting structure types & records
 -type path() :: [ non_neg_integer() ].
 
--type vote() :: pending | yes | no.
+-type vote() :: boolean() | pending.
 
 -record(vstruct_p, {
           votes = 1 :: pos_integer(),

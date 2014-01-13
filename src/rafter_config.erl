@@ -49,10 +49,9 @@ quorum(Me, #config{state=transitional, oldvstruct=Old, newvstruct=New}, Response
 %% this case.
 quorum(Me, Struct, Responses) ->
     Servers = rafter_voting:to_list(Struct),
-    Votes = filtermap(
+    Votes = dict:filter(
               fun(Peer, R) -> R =:= true andalso
                               lists:member(Peer, Servers) end,
-              fun(_, _) -> yes end,
               dict:store(Me, true, Responses)),
     rafter_voting:quorum(Struct, Votes).
 
@@ -130,18 +129,9 @@ unique_sort(L) ->
 -spec has_quorum(term(), #vstruct{}, dict(), non_neg_integer()) ->
     boolean().
 has_quorum(Me, Servers, Responses, Index) ->
-    Votes = filtermap(
-              fun(_, I) -> I >= Index end,
-              fun(_, _) -> yes end,
-              Responses),
+    Positive = dict:filter(fun(_, I) -> I >= Index end, Responses),
+    Votes = dict:map(fun(_, _) -> true end, Positive),
     case rafter_voting:member(Me, Servers) of
-        true -> rafter_voting:quorum(Servers, dict:store(Me, yes, Votes));
+        true -> rafter_voting:quorum(Servers, dict:store(Me, true, Votes));
         false -> rafter_voting:quorum(Servers, Votes)
     end.
-
--spec filtermap(fun((term(), term()) -> boolean()),
-                fun((term(), term()) -> term()),
-                dict())
-    -> dict().
-filtermap(P, F, Dict) ->
-    dict:map(F, dict:filter(P, Dict)).

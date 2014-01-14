@@ -66,6 +66,7 @@ init([Me, #rafter_opts{state_machine=StateMachine}]) ->
                    voted_for=VotedFor,
                    me=Me,
                    responses=dict:new(),
+                   vstate=undefined,
                    followers=dict:new(),
                    timer=Timer,
                    state_machine=StateMachine,
@@ -271,21 +272,24 @@ candidate(#vote{term=VoteTerm}, #state{term=CurrentTerm}=State)
           when VoteTerm < CurrentTerm ->
     {next_state, candidate, State};
 
-candidate(#vote{success=false, from=From}, #state{responses=Responses}=State) ->
+candidate(#vote{success=false, from=From},
+          #state{responses=Responses, vstate=VState}=State) ->
     NewResponses = dict:store(From, false, Responses),
-    NewState = State#state{responses=NewResponses},
+    NewVState = rafter_voting:vote(VState, From, false),
+    NewState = State#state{responses=NewResponses, vstate=NewVState},
     {next_state, candidate, NewState};
 
 %% Sweet, someone likes us! Do we have enough votes to get elected?
-candidate(#vote{success=true, from=From}, #state{responses=Responses, me=Me,
-                                                 config=Config}=State) ->
+candidate(#vote{success=true, from=From},
+          #state{responses=Responses, vstate=VState}=State) ->
     NewResponses = dict:store(From, true, Responses),
-    case rafter_config:quorum(Me, Config, NewResponses) of
+    NewVState = rafter_voting:vote(VState, From, true),
+    case rafter_voting:vote(NewVState) of
         true ->
             NewState = become_leader(State),
             {next_state, leader, NewState};
-        false ->
-            NewState = State#state{responses=NewResponses},
+        _ ->
+            NewState = State#state{responses=NewResponses, vstate=NewVState},
             {next_state, candidate, NewState}
     end.
 
@@ -722,6 +726,7 @@ step_down(NewTerm, State0) ->
     State = reset_timer(election_timeout(), State0),
     NewState = State#state{term=NewTerm,
                            responses=dict:new(),
+                           vstate=undefined,
                            leader=undefined},
     set_metadata(undefined, NewState).
 
@@ -833,18 +838,22 @@ request_votes(#state{config=Config, term=Term, me=Me}) ->
     [rafter_requester:send(Peer, Msg) || Peer <- Voters].
 
 -spec become_candidate(#state{}) -> #state{}.
-become_candidate(#state{term=CurrentTerm, me=Me}=State0) ->
+become_candidate(#state{term=CurrentTerm, me=Me, config=Config}=State0) ->
+    VState = rafter_voting:vote(rafter_config:init_vstate(Config), Me, true),
     State = reset_timer(election_timeout(), State0),
     State2 = State#state{term=CurrentTerm + 1,
                          responses=dict:new(),
+                         vstate=VState,
                          leader=undefined},
     State3 = set_metadata(Me, State2),
     _ = request_votes(State3),
     State3.
 
-become_leader(#state{me=Me, term=Term, init_config=InitConfig}=State) ->
+become_leader(#state{me=Me, term=Term, init_config=InitConfig, config=Config}=State) ->
+    VState = rafter_voting:vote(rafter_config:init_vstate(Config), Me, true),
     NewState = State#state{leader=Me,
                            responses=dict:new(),
+                           vstate=VState,
                            followers=initialize_followers(State),
                            send_clock = 0,
                            send_clock_responses = dict:new(),

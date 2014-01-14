@@ -3,12 +3,20 @@
 -include("rafter.hrl").
 
 %% API
--export([quorum/3, quorum_max/3, voters/1, voters/2, followers/2,
-         reconfig/2, allow_config/2, has_vote/2]).
+-export([init_vstate/1, quorum/3, quorum_max/3, voters/1, voters/2,
+         followers/2, reconfig/2, allow_config/2, has_vote/2]).
 
 %%====================================================================
 %% API
 %%====================================================================
+
+-spec init_vstate(#config{}) -> #vstate{}.
+init_vstate(#config{state=stable, oldvstruct=Old}) ->
+    rafter_voting:init_vstate(Old);
+init_vstate(#config{state=staging, oldvstruct=Old}) ->
+    rafter_voting:init_vstate(Old);
+init_vstate(#config{state=transitional, oldvstruct=Old, newvstruct=New}) ->
+    rafter_voting:init_vstate(rafter_voting:merge_vstructs(1, 2, [Old, New])).
 
 -spec quorum_max(peer(), #config{} | #vstruct{}, dict()) -> non_neg_integer().
 quorum_max(_Me, #config{state=blank}, _) ->

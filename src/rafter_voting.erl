@@ -112,19 +112,9 @@ acc_votes(State = #vstate_v{children = States}) ->
 
 -spec to_list(#vstate{} | #vstruct{} | undefined) -> [peer()].
 to_list(#vstate{indices = Indices}) ->
-    try dict:fetch_keys(Indices) of
-        Ids -> Ids
-    catch
-        error:function_clause -> []
-    end;
+    dict:fetch_keys(Indices);
 to_list(#vstruct{indices = Indices}) ->
-    try dict:fetch_keys(Indices) of
-        Ids -> Ids
-    catch
-        error:function_clause -> []
-    end;
-to_list(undefined) ->
-    [].
+    dict:fetch_keys(Indices).
 
 -spec member(peer(), #vstate{} | #vstruct{}) -> boolean().
 member(I, S) ->

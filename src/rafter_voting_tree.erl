@@ -26,12 +26,12 @@ tree([RootId|Ids], D)
 tree([RootId|Ids], _D) ->
     % length(Ids) <= D
     Leaves = lists:map(fun(Id) -> #vstruct_p{id = Id} end, Ids),
-    {Indices, _} = lists:mapfoldl(fun(Id, K) -> {{Id, [[K]]}, K+1} end,
+    {Indices, _} = lists:mapfoldl(fun(Id, K) -> {{Id, [[0, K]]}, K+1} end,
                                   0, Ids),
     Tree = #vstruct_v{thresh = 1, children = Leaves},
     Root = #vstruct_p{id = RootId},
     NewTree = #vstruct_v{thresh = 2, children = [Tree, Root]},
-    NewIndices = dict:append(RootId, [length(Leaves)], dict:from_list(Indices)),
+    NewIndices = dict:append(RootId, [1], dict:from_list(Indices)),
     #vstruct{tree = NewTree, indices = NewIndices}.
 
 -spec drop(non_neg_integer(), list()) -> list().

@@ -9,23 +9,30 @@ tree(Ids) ->
     tree(Ids, 2).
 
 -spec tree([peer()], pos_integer()) -> #vstruct{}.
+tree([RootId], _D) ->
+    #vstruct{tree = #vstruct_v{thresh = 1,
+                               children = [#vstruct_p{id = RootId}]},
+             indices = dict:from_list([{RootId, [[0]]}])};
 tree([RootId|Ids], D)
   when length(Ids) > D ->
-    SublistLength = ceil(length(Ids) / D),
-    IdLists = chunk(SublistLength, Ids),
-    SubTrees = lists:map(fun(SubIds) -> tree(SubIds, D) end, IdLists),
-    SubTree = rafter_voting:merge_vstructs(1, 1, SubTrees),
-    Root = single_node_vstruct(RootId),
-    rafter_voting:merge_vstructs(1, 2, [Root, SubTree]);
+    SubTrees = lists:map(fun(SubIds) -> tree(SubIds, D) end,
+                         chunk(ceil(length(Ids) / D), Ids)),
+    #vstruct{tree = Tree, indices = Indices} = rafter_voting:merge_vstructs(
+                                                 1, 1, SubTrees),
+    Root = #vstruct_p{id = RootId},
+    NewTree = #vstruct_v{thresh = 2, children = [Tree, Root]},
+    NewIndices = dict:append(RootId, [length(Tree#vstruct_v.children)], Indices),
+    #vstruct{tree = NewTree, indices = NewIndices};
 tree([RootId|Ids], _D) ->
     % length(Ids) <= D
     Leaves = lists:map(fun(Id) -> #vstruct_p{id = Id} end, Ids),
     {Indices, _} = lists:mapfoldl(fun(Id, K) -> {{Id, [[K]]}, K+1} end,
                                   0, Ids),
-    SubTree = #vstruct{tree = #vstruct_v{thresh = 1, children = Leaves},
-             indices = dict:from_list(Indices)},
-    Root = single_node_vstruct(RootId),
-    rafter_voting:merge_vstructs(1, 2, [Root, SubTree]).
+    Tree = #vstruct_v{thresh = 1, children = Leaves},
+    Root = #vstruct_p{id = RootId},
+    NewTree = #vstruct_v{thresh = 2, children = [Tree, Root]},
+    NewIndices = dict:append(RootId, [length(Leaves)], dict:from_list(Indices)),
+    #vstruct{tree = NewTree, indices = NewIndices}.
 
 -spec drop(non_neg_integer(), list()) -> list().
 drop(_, []) ->
@@ -40,11 +47,6 @@ chunk(_, []) ->
     [];
 chunk(N, L) ->
     [lists:sublist(L, N) | chunk(N, drop(N, L))].
-
--spec single_node_vstruct(peer()) -> #vstruct{}.
-single_node_vstruct(Id) ->
-    #vstruct{tree = #vstruct_v{thresh = 1, children = [#vstruct_p{id = Id}]},
-             indices = dict:from_list([{Id, [1]}])}.
 
 ceil(X) ->
     T = erlang:trunc(X),

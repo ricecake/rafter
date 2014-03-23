@@ -112,9 +112,7 @@ acc_votes(State = #vstate_v{children = States}) ->
     No = length(lists:filter(Voted(false), States)),
     State#vstate_v{yes_votes = Yes, no_votes = No}.
 
--spec to_list(#vstate{} | #vstruct{} | undefined) -> [peer()].
-to_list(#vstate{indices = Indices}) ->
-    dict:fetch_keys(Indices);
+-spec to_list(#vstruct{}) -> [peer()].
 to_list(#vstruct{indices = Indices}) ->
     dict:fetch_keys(Indices).
 

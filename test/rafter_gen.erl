@@ -25,10 +25,16 @@ server() ->
 
 vsgen() ->
     oneof([{rafter_voting_majority, majority},
+           {rafter_voting_tree, tree},
            {rafter_voting_grid, grid}]).
 
 vstruct(Peers) when is_list(Peers) ->
-    ?LET({Mod, Fun}, vsgen(), apply(Mod, Fun, [Peers]));
+    ?LET({{Mod, Fun}, D, R}, {vsgen(), oneof([2, 3, 4]), bool()},
+         case Fun of
+             tree -> apply(Mod, Fun, [Peers, D]);
+             grid -> apply(Mod, Fun, [Peers, R]);
+             _ -> apply(Mod, Fun, [Peers])
+         end);
 vstruct(Peer) ->
     ?LET(Servers, servers(),
          vstruct(shuffle([Peer|Servers]))).

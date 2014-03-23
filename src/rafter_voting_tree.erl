@@ -16,7 +16,8 @@ tree([RootId], _D) ->
 tree([RootId|Ids], D)
   when length(Ids) > D ->
     SubTrees = lists:map(fun(SubIds) -> tree(SubIds, D) end,
-                         chunk(ceil(length(Ids) / D), Ids)),
+                         rafter_voting:chunk(
+                           rafter_voting:ceil(length(Ids) / D), Ids)),
     #vstruct{tree = Tree, indices = Indices} = rafter_voting:merge_vstructs(
                                                  1, 1, SubTrees),
     Root = #vstruct_p{id = RootId},
@@ -33,25 +34,3 @@ tree([RootId|Ids], _D) ->
     NewTree = #vstruct_v{thresh = 2, children = [Tree, Root]},
     NewIndices = dict:append(RootId, [1], dict:from_list(Indices)),
     #vstruct{tree = NewTree, indices = NewIndices}.
-
--spec drop(non_neg_integer(), list()) -> list().
-drop(_, []) ->
-    [];
-drop(0, L) ->
-    L;
-drop(N, [_|L]) ->
-    drop(N-1, L).
-
--spec chunk(non_neg_integer(), list()) -> [ list() ].
-chunk(_, []) ->
-    [];
-chunk(N, L) ->
-    [lists:sublist(L, N) | chunk(N, drop(N, L))].
-
-ceil(X) ->
-    T = erlang:trunc(X),
-    case (X - T) of
-        Neg when Neg < 0 -> T;
-        Pos when Pos > 0 -> T + 1;
-        _ -> T
-    end.

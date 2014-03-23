@@ -22,7 +22,11 @@ tree([RootId|Ids], D)
                                                  1, 1, SubTrees),
     Root = #vstruct_p{id = RootId},
     NewTree = #vstruct_v{thresh = 2, children = [Tree, Root]},
-    NewIndices = dict:append(RootId, [length(Tree#vstruct_v.children)], Indices),
+    NewIndices = dict:append(
+                   RootId, [1], dict:map(
+                                  fun(_, Paths) ->
+                                          [ [0] ++ Path || Path <- Paths ] end,
+                                  Indices)),
     #vstruct{tree = NewTree, indices = NewIndices};
 tree([RootId|Ids], _D) ->
     % length(Ids) <= D

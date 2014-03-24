@@ -17,16 +17,13 @@ grid(Ids, FavoringRows) ->
 
 -spec columnCovers([peer()], grid_spec()) -> #vstruct{}.
 columnCovers(Ids, {Rows, Cols, D}) ->
-    Covers = lists:map(
-               fun(Col) -> columnCover(Ids, Col, {Rows, Cols, D}) end,
-               lists:seq(1, Cols)),
+    Covers = [columnCover(Ids, C, {Rows, Cols, D}) || C <- lists:seq(1, Cols)],
     rafter_voting:merge_vstructs(1, Cols, Covers).
 
 -spec completeColumnCovers([peer()], grid_spec()) -> #vstruct{}.
 completeColumnCovers(Ids, {Rows, Cols, D}) ->
-    Covers = lists:map(
-               fun(Col) -> completeColumnCover(Ids, Col, {Rows, Cols, D}) end,
-               lists:seq(1, Cols)),
+    Covers = [completeColumnCover(Ids, C, {Rows, Cols, D}) ||
+              C <- lists:seq(1, Cols)],
     rafter_voting:merge_vstructs(1, 1, Covers).
 
 
@@ -44,7 +41,7 @@ completeColumnCover(Ids, Col, {_Rows, Cols, _D}) ->
                            error:function_clause -> Acc
                        end
                end, [], RowsIds),
-    Phys = lists:map(fun(Id) -> #vstruct_p{id = Id} end, ColIds),
+    Phys = [#vstruct_p{id = Id} || Id <- ColIds],
     {Indices, _} = lists:mapfoldl(fun(Id, K) -> {{Id, [[K]]}, K+1} end,
                                   0, ColIds),
     #vstruct{tree = #vstruct_v{thresh = length(Phys), children = Phys},

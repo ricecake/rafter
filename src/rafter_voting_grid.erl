@@ -22,14 +22,15 @@ columnCovers(Ids, {Rows, Cols, D}) ->
 
 -spec completeColumnCovers([peer()], grid_spec()) -> #vstruct{}.
 completeColumnCovers(Ids, {Rows, Cols, D}) ->
-    Covers = [completeColumnCover(Ids, C, {Rows, Cols, D}) ||
-              C <- lists:seq(1, Cols)],
+    Covers = lists:filtermap(
+               fun(C) -> completeColumnCover(Ids, C, {Rows, Cols, D}) end,
+               lists:seq(1, Cols)),
     rafter_voting:merge_vstructs(1, 1, Covers).
 
 
--spec completeColumnCover([peer()], non_neg_integer(), grid_spec()) ->
+-spec columnCover([peer()], non_neg_integer(), grid_spec()) ->
     #vstruct{}.
-completeColumnCover(Ids, Col, {_Rows, Cols, _D}) ->
+columnCover(Ids, Col, {_Rows, Cols, _D}) ->
     RowsIds = rafter_voting:chunk(Cols, Ids),
     %% ColIds = lists:map(fun(RowIds) -> lists:nth(Col, RowIds) end, RowsIds),
     %% cannot use map here: lists:nth may fail
@@ -44,13 +45,18 @@ completeColumnCover(Ids, Col, {_Rows, Cols, _D}) ->
     Phys = [#vstruct_p{id = Id} || Id <- ColIds],
     {Indices, _} = lists:mapfoldl(fun(Id, K) -> {{Id, [[K]]}, K+1} end,
                                   0, ColIds),
-    #vstruct{tree = #vstruct_v{thresh = length(Phys), children = Phys},
+    #vstruct{tree = #vstruct_v{thresh = 1, children = Phys},
              indices = dict:from_list(Indices)}.
 
--spec columnCover([peer()], non_neg_integer(), grid_spec()) -> #vstruct{}.
-columnCover(Ids, Col, GridSpec) ->
-    #vstruct{tree = T, indices = I} = completeColumnCover(Ids, Col, GridSpec),
-    #vstruct{tree = T#vstruct_v{thresh = 1}, indices = I}.
+-spec completeColumnCover([peer()], non_neg_integer(), grid_spec()) ->
+    {true, #vstruct{}} | false.
+completeColumnCover(Ids, Col, GridSpec={Rows, _Cols, _D}) ->
+    #vstruct{tree = T, indices = I} = columnCover(Ids, Col, GridSpec),
+    ColumnCover = #vstruct{tree = T#vstruct_v{thresh = Rows}, indices = I},
+    case length(T#vstruct_v.children) >= Rows of
+        true -> {true, ColumnCover};
+        false -> false
+    end.
 
 -spec makeGrid(pos_integer(), boolean()) -> grid_spec().
 makeGrid(N, FavoringRows) ->

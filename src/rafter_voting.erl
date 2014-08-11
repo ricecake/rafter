@@ -42,7 +42,7 @@ vote(S = #vstate{tree = Tree, indices = Indices}, Vid, Vote) ->
             S
     end.
 
--spec quorum(#vstruct{}, dict()) -> boolean().
+-spec quorum(#vstruct{}, dict:dict()) -> boolean().
 quorum(Struct, Votes) ->
     State0 = init_vstate(Struct),
     State1 = dict:fold(
@@ -130,7 +130,7 @@ floor(X) ->
 % internal functions
 %
 
--spec combine_indices(dict(), dict()) -> dict().
+-spec combine_indices(dict:dict(), dict:dict()) -> dict:dict().
 combine_indices(IndicesA, IndicesB) ->
     dict:fold(
       fun(Id, Paths, AccIndices) ->
@@ -140,7 +140,7 @@ combine_indices(IndicesA, IndicesB) ->
       end, IndicesA, IndicesB).
 
 -spec prepend_paths(non_neg_integer(), #vstruct{}) ->
-    {#vstruct_p{} | #vstruct_v{}, dict()}.
+    {#vstruct_p{} | #vstruct_v{}, dict:dict()}.
 prepend_paths(Index, #vstruct{tree = Tree, indices = Indices}) ->
     NewIndices = dict:map(
                    fun(_, Paths) ->

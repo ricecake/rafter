@@ -19,12 +19,12 @@
     timer :: reference(),
 
     %% leader state: contains nextIndex for each peer
-    followers = dict:new() :: dict(),
+    followers = dict:new() :: dict:dict(),
 
     %% Dict keyed by peer id.
     %% contains true as val when candidate
     %% contains match_indexes as val when leader
-    responses = dict:new() :: dict(),
+    responses = dict:new() :: dict:dict(),
 
     %% Current voting state -- can be computed from the "responses" field, but
     %% we cache it here for performance
@@ -36,14 +36,14 @@
 
     %% Keep track of the highest send_clock received from each peer
     %% Reset on leader election
-    send_clock_responses = dict:new() :: dict(),
+    send_clock_responses = dict:new() :: dict:dict(),
 
     %% Outstanding Client Write Requests
     client_reqs = [] :: [#client_req{}],
 
     %% Outstanding Client Read Requests
     %% Keyed on send_clock, Val = [#client_req{}]
-    read_reqs = orddict:new() :: orddict:orddict(),
+    read_reqs = orddict:new() :: orddict:dict(),
 
     %% All servers making up the ensemble
     me :: string(),

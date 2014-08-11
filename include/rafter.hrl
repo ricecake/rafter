@@ -18,7 +18,7 @@
 
 -record(vstruct, {
           tree :: #vstruct_v{},
-          indices :: dict()
+          indices :: dict:dict()
 }).
 
 -record(vstate_p, {
@@ -36,7 +36,7 @@
 
 -record(vstate, {
           tree :: #vstate_v{},
-          indices :: dict()
+          indices :: dict:dict()
 }).
 
 %% Transport Independent MESSAGES

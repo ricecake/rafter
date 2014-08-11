@@ -18,7 +18,7 @@ init_vstate(#config{state=staging, oldvstruct=Old}) ->
 init_vstate(#config{state=transitional, oldvstruct=Old, newvstruct=New}) ->
     rafter_voting:init_vstate(rafter_voting:merge_vstructs(1, 2, [Old, New])).
 
--spec quorum_max(peer(), #config{} | #vstruct{}, dict()) -> non_neg_integer().
+-spec quorum_max(peer(), #config{} | #vstruct{}, dict:dict()) -> non_neg_integer().
 quorum_max(_Me, #config{state=blank}, _) ->
     0;
 quorum_max(Me, #config{state=stable, oldvstruct=OldServers}, Responses) ->
@@ -42,7 +42,7 @@ quorum_max(Me, Servers, Responses) ->
                  Indices),
     case Accepted of [] -> 0; _ -> lists:last(Accepted) end.
 
--spec quorum(peer(), #config{} | #vstruct{}, dict()) -> boolean().
+-spec quorum(peer(), #config{} | #vstruct{}, dict:dict()) -> boolean().
 quorum(_Me, #config{state=blank}, _Responses) ->
     false;
 quorum(Me, #config{state=stable, oldvstruct=OldServers}, Responses) ->
@@ -120,7 +120,7 @@ allow_config(_Config, _NewServers) ->
 %% Internal Functions
 %%====================================================================
 
--spec index(atom() | {atom(), atom()}, dict()) -> non_neg_integer().
+-spec index(atom() | {atom(), atom()}, dict:dict()) -> non_neg_integer().
 index(Peer, Responses) ->
     case dict:find(Peer, Responses) of
         {ok, Index} ->
@@ -133,7 +133,7 @@ index(Peer, Responses) ->
 unique_sort(L) ->
     ordsets:to_list(ordsets:from_list(L)).
 
--spec has_quorum(term(), #vstruct{}, dict(), non_neg_integer()) ->
+-spec has_quorum(term(), #vstruct{}, dict:dict(), non_neg_integer()) ->
     boolean().
 has_quorum(Me, Servers, Responses, Index) ->
     Positive = dict:filter(fun(_, I) -> I >= Index end, Responses),

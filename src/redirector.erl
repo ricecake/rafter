@@ -33,7 +33,7 @@
 %% @end
 %%--------------------------------------------------------------------
 start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+    gen_server:start_link(?MODULE, [], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -85,6 +85,9 @@ handle_cast({From, Leader, Request}, State) ->
     Reply = gen_fsm:sync_send_event(Leader, Request),
     gen_fsm:reply(From, Reply),
     {noreply, State};
+
+handle_cast(stop, State) ->
+    {stop, normal, State};
 
 handle_cast(_, State) ->
     {noreply, State}.

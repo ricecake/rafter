@@ -419,8 +419,8 @@ read_metadata(Filename, FileSize) ->
         {error, enoent} when FileSize =< ?FILE_HEADER_SIZE ->
             {ok, #meta{}};
         {error, Reason} ->
-            io:format("Failed to open metadata file: ~p. Reason = ~p~n",
-                [Filename, Reason]),
+            lager:error("Failed to open metadata file: ~p. Reason = ~p~n",
+			[Filename, Reason]),
             {ok, #meta{}}
     end.
 
@@ -444,7 +444,6 @@ repair_file(File, Size) ->
             #rafter_entry{term=Term, index=Index} = binary_to_entry(Data),
             {ok, ConfigStart, Term, Index, TruncateAt};
         not_found ->
-            io:format("NOT FOUND: Size = ~p~n", [Size]),
             ok = truncate(File, 0),
             empty_file
     end.
@@ -484,7 +483,6 @@ find_magic_number(File, Loc) ->
     {Block, Start} = read_block(File, Loc),
     case find_last_magic_number_in_block(Block) of
         {ok, Offset} ->
-            io:format("Magic Number found at ~p~n", [Start+Offset]),
             {ok, Start+Offset};
         not_found ->
             case Start of

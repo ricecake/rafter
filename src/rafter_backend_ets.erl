@@ -9,15 +9,15 @@
 
 init(Peer) ->
     State = #state{peer=Peer},
-    NewState = stop(State),
+    stop(State),
     _Tid1 = ets:new(rafter_backend_ets, [set, named_table, public]),
     _Tid2 = ets:new(rafter_backend_ets_tables, [set, named_table, public]),
-    NewState.
+    {ok, State}.
 
-stop(State) ->
+stop(_State) ->
     catch ets:delete(rafter_backend_ets),
     catch ets:delete(rafter_backend_ets_tables),
-    State.
+    ok.
 
 read({get, Table, Key}, State) ->
     Val = try

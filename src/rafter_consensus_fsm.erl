@@ -59,32 +59,39 @@ send_sync(To, Msg) ->
 %%=============================================================================
 
 init([Me, #rafter_opts{state_machine=StateMachine}]) ->
+    lager:info("me: ~p", [Me]),
     Timer = gen_fsm:send_event_after(election_timeout(), timeout),
     #meta{voted_for=VotedFor, term=Term} = rafter_log:get_metadata(Me),
-    BackendState = StateMachine:init(Me),
-    case redirector:start_link() of
-        {ok, Pid} ->
-            State = #state{term=Term,
-                           voted_for=VotedFor,
-                           me=Me,
-                           responses=dict:new(),
-                           vstate=undefined,
-                           followers=dict:new(),
-                           timer=Timer,
-                           state_machine=StateMachine,
-                           backend_state=BackendState,
-                           redirector=Pid},
-            Config = rafter_log:get_config(Me),
-            NewState =
-                case Config#config.state of
-                    blank ->
-                        State#state{config=Config};
-                    _ ->
-                        State#state{config=Config, init_config=complete}
-                end,
-            {ok, follower, NewState};
-        {error, Reason} ->
-            {error, Reason}
+    case StateMachine:init(Me) of
+	{ok, BackendState} ->
+	    case redirector:start_link() of
+		{ok, Pid} ->
+		    State = #state{term=Term,
+				   voted_for=VotedFor,
+				   me=Me,
+				   responses=dict:new(),
+				   vstate=undefined,
+				   followers=dict:new(),
+				   timer=Timer,
+				   state_machine=StateMachine,
+				   backend_state=BackendState,
+				   redirector=Pid},
+		    Config = rafter_log:get_config(Me),
+		    NewState =
+			case Config#config.state of
+			    blank ->
+				State#state{config=Config};
+			    _ ->
+				State#state{config=Config, init_config=complete}
+			end,
+		    {ok, follower, NewState};		
+		{error, Reason} ->
+		    lager:error("redirector start error: ~p", [Reason]),
+		    {stop, Reason}
+	    end;
+	{error, Reason} ->
+	    lager:error("backend ~p start error: ~p", [StateMachine, Reason]),
+	    {stop, Reason}
     end.
 
 format_status(_, [_, State]) ->
@@ -123,8 +130,11 @@ handle_info({client_timeout, Id}, StateName, #state{client_reqs=Reqs}=State) ->
 handle_info(_, _, State) ->
     {stop, badmsg, State}.
 
-terminate(_, _, #state{redirector=Redirctor}) ->
-    gen_server:cast(Redirctor, stop),
+terminate(_, _, #state{redirector=Redirctor,
+		       state_machine=StateMachine,
+		       backend_state=BackendState}) ->
+    _Ignore = gen_server:cast(Redirctor, stop),
+    _Ignore = StateMachine:stop(BackendState),
     ok.
 
 code_change(_OldVsn, StateName, State, _Extra) ->

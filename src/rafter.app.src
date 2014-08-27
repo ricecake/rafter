@@ -1,7 +1,7 @@
 {application, rafter,
  [
-  {description, ""},
-  {vsn, "1"},
+  {description, "raft for erlang"},
+  {vsn, git},
   {registered, []},
   {applications, [
                   lager,

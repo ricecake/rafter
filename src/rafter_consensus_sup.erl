@@ -17,11 +17,11 @@ start_link(Me, Opts) ->
     start_link(Name, SupName, Me, Opts).
 
 init([NameAtom, Me, Opts]) ->
-    LogServer = { rafter_log,
+    LogServer = {rafter_log,
                  {rafter_log, start_link, [NameAtom, Opts]},
                  permanent, 5000, worker, [rafter_log]},
 
-    ConsensusFsm = { rafter_consensus_fsm,
+    ConsensusFsm = {rafter_consensus_fsm,
                     {rafter_consensus_fsm, start_link, [NameAtom, Me, Opts]},
                     permanent, 5000, worker, [rafter_consensus_fsm]},
 
